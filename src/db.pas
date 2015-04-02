@@ -6,6 +6,18 @@ unit db;
 interface
    uses sqlite3, descriptions;
 
+Type
+   PResultRow = ^TResultRow;
+   TResultRow = record
+      Package_, Unit_, Page : AnsiString;
+   end;
+   
+   PResultSet = ^TResultSet;
+   TResultSet = record
+      NumRows : sInt;
+      Rows : Array of TResultRow
+   end;
+
 Function GetConfPath():AnsiString;
 
 Function Init():Boolean;
@@ -13,6 +25,8 @@ Function Quit():Boolean;
 
 Function CreateTables():Boolean;
 Function AddPage(Const Desc:TFunctionDesc):Boolean;
+
+Function FindPage(PageName:AnsiString; Out rset:TResultSet):Boolean;
 
 
 implementation
@@ -66,13 +80,19 @@ end;
 
 Function CreateTables():Boolean;
 Const
-   TABLE_NUM = 3;
+   CREATE_NUM = 5;
    
-   TblName : Array[1 .. TABLE_NUM] of AnsiString = (
-      'packages', 'units', 'pages'
+   CreateName : Array[1 .. CREATE_NUM] of AnsiString = (
+      'packages', 'units', 'pages',
+      'view_units', 'view_pages'
    );
    
-   SQL : Array[1 .. TABLE_NUM] of AnsiString = (
+   CreateType : Array[1 .. CREATE_NUM] of AnsiString = (
+      'TABLE', 'TABLE', 'TABLE',
+      'VIEW', 'VIEW'
+   );
+   
+   SQL : Array[1 .. CREATE_NUM] of AnsiString = (
       'CREATE TABLE IF NOT EXISTS `packages` ('+
          '`pkg_Id` INTEGER PRIMARY KEY ASC ON CONFLICT FAIL AUTOINCREMENT,'+
          '`pkg_Name` TEXT'+
@@ -88,26 +108,49 @@ Const
          '`page_Id` INTEGER PRIMARY KEY ASC ON CONFLICT FAIL AUTOINCREMENT,'+
          '`page_unitId` INTEGER REFERENCES `units` (`unit_Id`),'+
          '`page_Name` TEXT'+
-      ')'
+      ')',
+      
+      'CREATE VIEW IF NOT EXISTS `view_units` AS SELECT '+
+         '`p`.`pkg_Id` AS `pkg_Id`, '+
+         '`p`.`pkg_Name` AS `pkg_Name`, '+
+         '`u`.`unit_Id` AS `unit_Id`, '+
+         '`u`.`unit_Name` AS `unit_Name` '+
+         'FROM `units` `u` '+
+         'LEFT JOIN `packages` `p` '+
+         'ON `u`.`unit_pkgId` = `p`.`pkg_Id`'+
+      '',
+      
+      'CREATE VIEW IF NOT EXISTS `view_pages` AS SELECT '+
+         '`u`.`pkg_Id` AS `pkg_Id`, '+
+         '`u`.`pkg_Name` AS `pkg_Name`, '+
+         '`u`.`unit_Id` AS `unit_Id`, '+
+         '`u`.`unit_Name` AS `unit_Name`, '+
+         '`p`.`page_Id` AS `page_Id`, '+
+         '`p`.`page_Name` AS `page_Name`, '+
+         '(IFNULL(`u`.`pkg_Name`,''unknown'') || ''.'' || IFNULL(`u`.`unit_Name`,''unknown'') || ''.'' || `p`.`page_Name`) AS `fullName`'+
+         'FROM `pages` `p` '+
+         'LEFT JOIN `view_units` `u` '+
+         'ON `p`.`page_unitId` = `u`.`unit_Id`'+
+      ''
    );
    
 Var
    Idx : sInt;
    Stat : Psqlite3_stmt;
 begin
-   For Idx := 1 to TABLE_NUM do begin
+   For Idx := 1 to CREATE_NUM do begin
       If(sqlite3_prepare(Datab, PChar(SQL[Idx]), -1, @Stat, NIL) <> SQLITE_OK) then begin
-         Writeln(stderr, 'fpman: failed to prepare CREATE TABLE `', TblName[Idx],'` statement: ',sqlite3_errmsg(Datab));
+         Writeln(stderr, 'fpman: failed to prepare CREATE ',CreateType[Idx],' `', CreateName[Idx],'` statement: ',sqlite3_errmsg(Datab));
          Exit(False)
       end;
       
       If(sqlite3_step(Stat) <> SQLITE_DONE) then begin
-         Writeln(stderr, 'fpman: failed to execute CREATE TABLE `', TblName[Idx],'` statement: ',sqlite3_errmsg(Datab));
+         Writeln(stderr, 'fpman: failed to execute CREATE ',CreateType[Idx],' `', CreateName[Idx],'` statement: ',sqlite3_errmsg(Datab));
          Exit(False)
       end;
       
       If(sqlite3_finalize(Stat) <> SQLITE_OK) then begin
-         Writeln(stderr, 'fpman: failed to finalize CREATE TABLE `', TblName[Idx],'` statement: ',sqlite3_errmsg(Datab));
+         Writeln(stderr, 'fpman: failed to finalize CREATE ',CreateType[Idx],'`', CreateName[Idx],'` statement: ',sqlite3_errmsg(Datab));
          Exit(False)
       end;
    end;
@@ -221,12 +264,63 @@ begin
    end;
    
    If(Not GetID(UnitId, 'units', 'unit_Name', Desc.Unit_, PackageId, 'unit_pkgId')) then begin
-      Writeln(stderr, 'fpman: failed to SELECT / INSERT unit from database (in package #',PackageId,')');
+      Writeln(stderr, 'fpman: failed to SELECT / INSERT unit from database');
       Exit(False)
    end;
    
    If(Not GetID(PageId, 'pages', 'page_Name', Desc.Name, UnitId, 'page_unitId')) then begin
       Writeln(stderr, 'fpman: failed to SELECT / INSERT page from database');
+      Exit(False)
+   end;
+   
+   Exit(True)
+end;
+
+
+Function FindPage(PageName:AnsiString; Out rset:TResultSet):Boolean;
+Var
+   Code : sInt;
+   Stat : Psqlite3_stmt;
+   SQL : AnsiString;
+begin
+   rset.NumRows := 0;
+   SQL := 'SELECT `pkg_Name`, `unit_Name`, `page_Name` FROM `view_pages` WHERE (`fullName` LIKE ?)';
+   
+   PageName := StringReplace(PageName, '\', '\\', [rfReplaceAll]);
+   PageName := StringReplace(PageName, '_', '\_', [rfReplaceAll]);
+   PageName := StringReplace(PageName, '%', '\%', [rfReplaceAll]);
+   PageName := '%' + PageName + '%';
+   
+   If(sqlite3_prepare(Datab, PChar(SQL), -1, @Stat, NIL) <> SQLITE_OK) then begin
+      Writeln(stderr, 'fpman: failed to prepare SELECT FROM `view_pages` statement: ',sqlite3_errmsg(Datab));
+      Exit(False)
+   end;
+   
+   If(sqlite3_bind_text(Stat, 1, PChar(PageName), -1, NIL) <> SQLITE_OK) then begin
+      Writeln(stderr, 'fpman: failed to bind argument for SELECT FROM `view_pages` statement: ',sqlite3_errmsg(Datab));
+      Exit(False)
+   end;
+   
+   While(True) do begin
+      Code := sqlite3_step(Stat);
+      If(Not (Code in [SQLITE_DONE, SQLITE_ROW])) then begin
+         Writeln(stderr, 'fpman: failed to execute SELECT FROM `view_pages` statement: ',sqlite3_errmsg(Datab));
+         Exit(False)
+      end;
+      
+      If(Code = SQLITE_DONE) then Break;
+   
+      If(Length(rset.Rows) <= rset.NumRows) then SetLength(rset.Rows, rset.numRows + 8);
+      
+      rset.Rows[rset.numRows].Package_ := sqlite3_column_text(Stat, 0);
+      rset.Rows[rset.numRows].Unit_ := sqlite3_column_text(Stat, 1);
+      rset.Rows[rset.numRows].Page := sqlite3_column_text(Stat, 2);
+      
+      rset.numRows += 1
+   end;
+   
+   If(sqlite3_finalize(Stat) <> SQLITE_OK) then begin
+      Writeln(stderr, 'fpman: failed to finalize SELECT FROM `view_pages` statement: ',sqlite3_errmsg(Datab));
       Exit(False)
    end;
    

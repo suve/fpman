@@ -48,11 +48,8 @@ begin
    Exit(True)
 end;
 
-// fpman.main()
+Procedure Operation_Import();
 begin
-   If(Not db.Init()) then Halt(1);
-   If(Not db.CreateTables()) then Halt(1);
-   
    InputStr := '';
    
    If(ParamCount() = 0) then begin
@@ -67,6 +64,7 @@ begin
       {$I-} Reset(TmpFile); {$I+}
       If(IOResult() <> 0) then begin
          Writeln(stderr,'fpman: unable to read file: ',TmpName);
+         db.Quit();
          Halt(1)
       end;
       
@@ -106,6 +104,68 @@ begin
          else Desc.Unit_ := 'unknown';
       
       db.AddPage(Desc)
+   end;
+end;
+
+Procedure Operation_Search();
+Var
+   DoQuit : Boolean;
+   rset : TResultSet;
+   Idx : sInt;
+begin
+   If(Not db.FindPage(ParamStr(1), rset)) then begin
+      DoQuit := True
+   end else
+   If(rset.numRows <= 0) then begin
+      Writeln(stderr, 'fpman: no entry found for "', ParamStr(1), '"');
+      DoQuit := True
+   end else
+   If(rset.numRows > 1) then begin
+      Writeln(stderr, 'fpman: multiple entries found for "', ParamStr(1), '":');
+      For Idx := 0 to (rset.numRows - 1) do
+         Writeln(stderr,
+            'fpman: ',(Idx+1),': ',
+            rset.Rows[Idx].Package_, '.',
+            rset.Rows[Idx].Unit_, '.',
+            rset.Rows[Idx].Page
+         );
+      DoQuit := True
+   end else begin
+      TmpName :=
+         LowerCase(rset.Rows[0].Package_) + '/' +
+         LowerCase(rset.Rows[0].Unit_) + '/' +
+         LowerCase(rset.Rows[0].Page) + '.man'
+      ;
+     
+     
+      If(Not FileExists(GetConfPath() + TmpName)) then begin
+         Writeln(stderr, 'fpman: file ~/.suve/fpman/', TmpName, ' not found or is not readable');
+         Writeln(stderr, 'fpman: you may want to validate your fpman database');
+         DoQuit := True
+      end else begin
+         TmpName := GetConfPath() + TmpName;
+         DoQuit := False
+      end
+   end;
+   
+   If(DoQuit) then begin
+      db.Quit();
+      Halt(1)
+   end;
+end;
+
+// fpman.main()
+begin
+   If(Not db.Init()) then Halt(1);
+   If(Not db.CreateTables()) then Halt(1);
+   
+   If(ParamCount() = 0) then begin
+      Operation_Import()
+   end else begin
+      TmpName := ParamStr(1);
+      If(LowerCase(Copy(TmpName, Length(TmpName) - 4, 5)) = '.html')
+         then Operation_Import()
+         else Operation_Search()
    end;
    
    db.Quit();
