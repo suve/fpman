@@ -4,7 +4,7 @@ program fpman;
 
 uses
    SysUtils, Unix,
-   descriptions, parser, troff;
+   descriptions, parser, troff, db;
 
 Var
    InputLine, InputStr : AnsiString;
@@ -15,20 +15,6 @@ Var
    
    TmpName : AnsiString;
    TmpFile : Text;
-
-Const
-   HomeVar = {$IFDEF   LINUX} 'HOME';    {$ELSE}
-             {$IFDEF WINDOWS} 'APPDATA'; {$ELSE}
-             {$FATAL HomeVar must be set.} {$ENDIF} {$ENDIF}
-             
-   ConfDir = {$IFDEF   LINUX} '/.suve/fpman/'; {$ELSE}
-             {$IFDEF WINDOWS} '\suve\fpman\';  {$ELSE}
-             {$FATAL ConfDir must be set.} {$ENDIF} {$ENDIF}
-
-Function GetConfPath():AnsiString;
-begin
-   Result := GetEnvironmentVariable(HomeVar) + ConfDir
-end;
 
 Function CreateCacheDir():Boolean;
 begin
@@ -64,6 +50,9 @@ end;
 
 // fpman.main()
 begin
+   If(Not db.Init()) then Halt(1);
+   If(Not db.CreateTables()) then Halt(1);
+   
    InputStr := '';
    
    If(ParamCount() = 0) then begin
@@ -104,9 +93,21 @@ begin
       TmpName := GetTempFileName('', 'fpman-');
       If(Not OutputToFile()) then begin
          Writeln(stderr, 'fpman: failed to write temporary file ',TmpName);
+         db.Quit();
          Halt(1)
       end
+   end else begin
+      If(Desc.Package_ <> '')
+         then Desc.Package_ := LowerCase(Desc.Package_)
+         else Desc.Package_ := 'unknown';
+         
+      If(Desc.Unit_ <> '')
+         then Desc.Unit_ := LowerCase(Desc.Unit_)
+         else Desc.Unit_ := 'unknown';
+      
+      db.AddPage(Desc)
    end;
    
+   db.Quit();
    fpExecLP('man', [TmpName])
 end.

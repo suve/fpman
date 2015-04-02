@@ -1,0 +1,236 @@
+unit db;
+
+{$INCLUDE defines.inc}
+
+
+interface
+   uses sqlite3, descriptions;
+
+Function GetConfPath():AnsiString;
+
+Function Init():Boolean;
+Function Quit():Boolean;
+
+Function CreateTables():Boolean;
+Function AddPage(Const Desc:TFunctionDesc):Boolean;
+
+
+implementation
+   uses SysUtils;
+
+Const
+   HomeVar = {$IFDEF   LINUX} 'HOME';    {$ELSE}
+             {$IFDEF WINDOWS} 'APPDATA'; {$ELSE}
+             {$FATAL HomeVar must be set.} {$ENDIF} {$ENDIF}
+             
+   ConfDir = {$IFDEF   LINUX} '/.suve/fpman/'; {$ELSE}
+             {$IFDEF WINDOWS} '\suve\fpman\';  {$ELSE}
+             {$FATAL ConfDir must be set.} {$ENDIF} {$ENDIF}
+
+Function GetConfPath():AnsiString;
+begin
+   Result := GetEnvironmentVariable(HomeVar) + ConfDir
+end;
+
+Var
+   Datab : Psqlite3;
+
+Function Init():Boolean;
+Var
+   DBpath : AnsiString;
+begin
+   DBpath := GetConfPath() + 'fpman.sqlite';
+   If(Not FileExists(DBpath)) then 
+      If(Not ForceDirectories(GetConfPath())) then begin
+         Writeln(stderr, 'fpman: failed to create config directory');
+         Exit(False)
+      end;
+   
+   If(sqlite3_open(PChar(GetConfPath() + 'fpman.sqlite'), @Datab) <> SQLITE_OK) then begin
+      Writeln(stderr, 'fpman: failed to open fpman.sqlite: ',sqlite3_errmsg(Datab));
+      Exit(False);
+   end;
+   
+   Exit(True)
+end;
+
+Function Quit():Boolean;
+begin
+   If(sqlite3_close(Datab) <> SQLITE_OK) then begin
+      Writeln(stderr, 'fpman: failed to close fpman.sqlite: ',sqlite3_errmsg(Datab));
+      Exit(False)
+   end;
+   
+   Exit(True)
+end;
+
+Function CreateTables():Boolean;
+Const
+   TABLE_NUM = 3;
+   
+   TblName : Array[1 .. TABLE_NUM] of AnsiString = (
+      'packages', 'units', 'pages'
+   );
+   
+   SQL : Array[1 .. TABLE_NUM] of AnsiString = (
+      'CREATE TABLE IF NOT EXISTS `packages` ('+
+         '`pkg_Id` INTEGER PRIMARY KEY ASC ON CONFLICT FAIL AUTOINCREMENT,'+
+         '`pkg_Name` TEXT'+
+       ')',
+   
+      'CREATE TABLE IF NOT EXISTS `units` ('+
+         '`unit_Id` INTEGER PRIMARY KEY ASC ON CONFLICT FAIL AUTOINCREMENT,'+
+         '`unit_pkgId` INTEGER REFERENCES `packages` (`pkg_Id`),'+
+         '`unit_Name` TEXT'+
+      ')',
+   
+      'CREATE TABLE IF NOT EXISTS `pages` ('+
+         '`page_Id` INTEGER PRIMARY KEY ASC ON CONFLICT FAIL AUTOINCREMENT,'+
+         '`page_unitId` INTEGER REFERENCES `units` (`unit_Id`),'+
+         '`page_Name` TEXT'+
+      ')'
+   );
+   
+Var
+   Idx : sInt;
+   Stat : Psqlite3_stmt;
+begin
+   For Idx := 1 to TABLE_NUM do begin
+      If(sqlite3_prepare(Datab, PChar(SQL[Idx]), -1, @Stat, NIL) <> SQLITE_OK) then begin
+         Writeln(stderr, 'fpman: failed to prepare CREATE TABLE `', TblName[Idx],'` statement: ',sqlite3_errmsg(Datab));
+         Exit(False)
+      end;
+      
+      If(sqlite3_step(Stat) <> SQLITE_DONE) then begin
+         Writeln(stderr, 'fpman: failed to execute CREATE TABLE `', TblName[Idx],'` statement: ',sqlite3_errmsg(Datab));
+         Exit(False)
+      end;
+      
+      If(sqlite3_finalize(Stat) <> SQLITE_OK) then begin
+         Writeln(stderr, 'fpman: failed to finalize CREATE TABLE `', TblName[Idx],'` statement: ',sqlite3_errmsg(Datab));
+         Exit(False)
+      end;
+   end;
+   Exit(True)
+end;
+
+Function InsertID(Const TableName, NameCol, InsertValue:AnsiString; Const fkID:sInt; Const fkCol:AnsiString):Boolean;
+Var
+   NameIdx : sInt;
+   Stat : Psqlite3_stmt;
+   SQL : AnsiString;
+begin
+   If(fkId > -1) then NameIdx := 2 else NameIdx := 1;
+
+   SQL := 'INSERT INTO `' + TableName + '` (';
+   If(fkID > -1) then SQL += '`' + fkCol + '`, ';
+   SQL += '`' + NameCol + '`) VALUES (';
+   If(fkID > -1) then SQL += '?, ';
+   SQL += '?)';
+   
+   If(sqlite3_prepare(Datab, PChar(SQL), -1, @Stat, NIL) <> SQLITE_OK) then begin
+      Writeln(stderr, 'fpman: failed to prepare INSERT INTO `',TableName,'` statement: ',sqlite3_errmsg(Datab));
+      Exit(False)
+   end;
+   
+   If(fkID > -1) then begin
+      If(sqlite3_bind_int(Stat, 1, fkId) <> SQLITE_OK) then begin
+         Writeln(stderr, 'fpman: failed to bind argument for INSERT INTO `',TableName,'` statement: ',sqlite3_errmsg(Datab));
+         Exit(False)
+      end;
+   end;
+   
+   If(sqlite3_bind_text(Stat, NameIdx, PChar(InsertValue), -1, NIL) <> SQLITE_OK) then begin
+      Writeln(stderr, 'fpman: failed to bind argument for INSERT INTO `',TableName,'` statement: ',sqlite3_errmsg(Datab));
+      Exit(False)
+   end;
+   
+   If(sqlite3_step(Stat) <> SQLITE_DONE) then begin
+      Writeln(stderr, 'fpman: failed to execute INSERT INTO `',TableName,'` statement: ',sqlite3_errmsg(Datab));
+      Exit(False)
+   end;
+   
+   If(sqlite3_finalize(Stat) <> SQLITE_OK) then begin
+      Writeln(stderr, 'fpman: failed to finalize INSERT INTO `',TableName,'` statement: ',sqlite3_errmsg(Datab));
+      Exit(False)
+   end;
+   
+   Exit(True)
+end;
+
+Function SelectID(Out ID:sInt; Const TableName, NameCol, SearchFor:AnsiString):Boolean;
+Var
+   Code : sInt;
+   Stat : Psqlite3_stmt;
+   SQL : AnsiString;
+begin
+   ID := -1;
+   SQL := 'SELECT * FROM `' + TableName + '` WHERE `' + NameCol + '` = ?';
+   
+   If(sqlite3_prepare(Datab, PChar(SQL), -1, @Stat, NIL) <> SQLITE_OK) then begin
+      Writeln(stderr, 'fpman: failed to prepare SELECT FROM `',TableName,'` statement: ',sqlite3_errmsg(Datab));
+      Exit(False)
+   end;
+   
+   If(sqlite3_bind_text(Stat, 1, PChar(SearchFor), -1, NIL) <> SQLITE_OK) then begin
+      Writeln(stderr, 'fpman: failed to bind argument for SELECT FROM `',TableName,'` statement: ',sqlite3_errmsg(Datab));
+      Exit(False)
+   end;
+   
+   Code := sqlite3_step(Stat);
+   If(Not (Code in [SQLITE_DONE, SQLITE_ROW])) then begin
+      Writeln(stderr, 'fpman: failed to execute SELECT FROM `',TableName,'` statement: ',sqlite3_errmsg(Datab));
+      Exit(False)
+   end;
+   
+   If(Code = SQLITE_ROW) then begin
+      If(sqlite3_column_type(Stat, 0) <> SQLITE_INTEGER) then begin
+         Writeln(stderr, 'fpman: first column in `',TableName,'` is not of type INTEGER');
+         Exit(False)
+      end;
+      
+      ID := sqlite3_column_int(Stat, 0)
+   end;
+   
+   If(sqlite3_finalize(Stat) <> SQLITE_OK) then begin
+      Writeln(stderr, 'fpman: failed to finalize SELECT FROM `',TableName,'` statement: ',sqlite3_errmsg(Datab));
+      Exit(False)
+   end;
+   
+   Exit(True)
+end;
+
+Function GetID(Out ID:sInt; Const TableName, NameCol, SearchFor:AnsiString; Const fkID:sInt = -1; Const fkCol:AnsiString = ''):Boolean;
+begin
+   If(Not (SelectID(ID, TableName, NameCol, SearchFor))) then Exit(False);
+   If(ID <> -1) then Exit(True);
+   
+   If(Not (InsertID(TableName, NameCol, SearchFor, fkID, fkCol))) then Exit(False);
+   
+   If(Not (SelectID(ID, TableName, NameCol, SearchFor))) then Exit(False);
+   Exit(ID <> -1)
+end;
+
+Function AddPage(Const Desc:TFunctionDesc):Boolean;
+Var
+   PackageId, UnitId, PageId : sInt;
+begin
+   If(Not GetID(PackageId, 'packages', 'pkg_Name', Desc.Package_)) then begin
+      Writeln(stderr, 'fpman: failed to SELECT / INSERT package from database');
+      Exit(False)
+   end;
+   
+   If(Not GetID(UnitId, 'units', 'unit_Name', Desc.Unit_, PackageId, 'unit_pkgId')) then begin
+      Writeln(stderr, 'fpman: failed to SELECT / INSERT unit from database (in package #',PackageId,')');
+      Exit(False)
+   end;
+   
+   If(Not GetID(PageId, 'pages', 'page_Name', Desc.Name, UnitId, 'page_unitId')) then begin
+      Writeln(stderr, 'fpman: failed to SELECT / INSERT page from database');
+      Exit(False)
+   end;
+   
+   Exit(True)
+end;
+
+end.
