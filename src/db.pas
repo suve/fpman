@@ -18,8 +18,6 @@ Type
       Rows : Array of TResultRow
    end;
 
-Function GetConfPath():AnsiString;
-
 Function Init():Boolean;
 Function Quit():Boolean;
 
@@ -27,24 +25,11 @@ Function CreateTables():Boolean;
 Function AddPage(Const Desc:TFunctionDesc):Boolean;
 
 Function FindPage(PageName:AnsiString; Out rset:TResultSet):Boolean;
+Function NumberOfPages(Out Number:sInt):Boolean;
 
 
 implementation
-   uses SysUtils;
-
-Const
-   HomeVar = {$IFDEF   LINUX} 'HOME';    {$ELSE}
-             {$IFDEF WINDOWS} 'APPDATA'; {$ELSE}
-             {$FATAL HomeVar must be set.} {$ENDIF} {$ENDIF}
-             
-   ConfDir = {$IFDEF   LINUX} '/.suve/fpman/'; {$ELSE}
-             {$IFDEF WINDOWS} '\suve\fpman\';  {$ELSE}
-             {$FATAL ConfDir must be set.} {$ENDIF} {$ENDIF}
-
-Function GetConfPath():AnsiString;
-begin
-   Result := GetEnvironmentVariable(HomeVar) + ConfDir
-end;
+   uses SysUtils, Conf;
 
 Var
    Datab : Psqlite3;
@@ -321,6 +306,37 @@ begin
    
    If(sqlite3_finalize(Stat) <> SQLITE_OK) then begin
       Writeln(stderr, 'fpman: failed to finalize SELECT FROM `view_pages` statement: ',sqlite3_errmsg(Datab));
+      Exit(False)
+   end;
+   
+   Exit(True)
+end;
+
+
+Function NumberOfPages(Out Number:sInt):Boolean;
+Const
+   SQL = 'SELECT COUNT(*) AS `number` FROM `pages`';
+Var
+   Code : sInt;
+   Stat : Psqlite3_stmt;
+begin
+   If(sqlite3_prepare(Datab, PChar(SQL), -1, @Stat, NIL) <> SQLITE_OK) then begin
+      Writeln(stderr, 'fpman: failed to prepare SELECT COUNT(*) statement: ',sqlite3_errmsg(Datab));
+      Exit(False)
+   end;
+   
+   Code := sqlite3_step(Stat);
+   If(Not (Code in [SQLITE_DONE, SQLITE_ROW])) then begin
+      Writeln(stderr, 'fpman: failed to execute SELECT COUNT(*) statement: ',sqlite3_errmsg(Datab));
+      Exit(False)
+   end;
+   
+   If(Code = SQLITE_ROW)
+      then Number := sqlite3_column_int(Stat, 0)
+      else Number := 0;
+   
+   If(sqlite3_finalize(Stat) <> SQLITE_OK) then begin
+      Writeln(stderr, 'fpman: failed to finalize SELECT COUNT(*) statement: ',sqlite3_errmsg(Datab));
       Exit(False)
    end;
    

@@ -4,7 +4,7 @@ program fpman;
 
 uses
    SysUtils, Unix,
-   descriptions, parser, troff, db;
+   descriptions, parser, troff, db, conf, options;
 
 Var
    InputLine, InputStr : AnsiString;
@@ -51,29 +51,20 @@ end;
 Procedure Operation_Import();
 begin
    InputStr := '';
+   Assign(TmpFile, ModeArg);
    
-   If(ParamCount() = 0) then begin
-      While(Not Eof(Input)) do begin
-         Readln(Input, InputLine);
-         InputStr += InputLine + #10
-      end;
-   end else begin
-      TmpName := ParamStr(1);
-      Assign(TmpFile, TmpName);
-      
-      {$I-} Reset(TmpFile); {$I+}
-      If(IOResult() <> 0) then begin
-         Writeln(stderr,'fpman: unable to read file: ',TmpName);
-         db.Quit();
-         Halt(1)
-      end;
-      
-      While(Not Eof(TmpFile)) do begin
-         Readln(TmpFile, InputLine);
-         InputStr += InputLine + #10
-      end;
-      Close(TmpFile)
+   {$I-} Reset(TmpFile); {$I+}
+   If(IOResult() <> 0) then begin
+      Writeln(stderr,'fpman: unable to read file: ',TmpName);
+      db.Quit();
+      Halt(1)
    end;
+   
+   While(Not Eof(TmpFile)) do begin
+      Readln(TmpFile, InputLine);
+      InputStr += InputLine + #10
+   end;
+   Close(TmpFile);
    
    ParseFunctionHTML(InputStr, Desc);
    
@@ -118,6 +109,10 @@ begin
    end else
    If(rset.numRows <= 0) then begin
       Writeln(stderr, 'fpman: no entry found for "', ParamStr(1), '"');
+      
+      If(Not NumberOfPages(Idx)) then Writeln(stderr, 'fpman: failed to check number of pages in database')
+      else If(Idx < 1) then Writeln(stderr, 'fpman: database seems to be empty, consider running fpman --import');
+      
       DoQuit := True
    end else
    If(rset.numRows > 1) then begin
@@ -140,7 +135,7 @@ begin
      
       If(Not FileExists(GetConfPath() + TmpName)) then begin
          Writeln(stderr, 'fpman: file ~/.suve/fpman/', TmpName, ' not found or is not readable');
-         Writeln(stderr, 'fpman: you may want to validate your fpman database');
+         Writeln(stderr, 'fpman: you may want to run fpman --revalidate');
          DoQuit := True
       end else begin
          TmpName := GetConfPath() + TmpName;
@@ -156,16 +151,19 @@ end;
 
 // fpman.main()
 begin
+   If(ParamCount() = 0) then begin
+      Write(Usage());
+      Halt(0)
+   end;
+   
+   ParseArgs();
+   
    If(Not db.Init()) then Halt(1);
    If(Not db.CreateTables()) then Halt(1);
    
-   If(ParamCount() = 0) then begin
-      Operation_Import()
-   end else begin
-      TmpName := ParamStr(1);
-      If(LowerCase(Copy(TmpName, Length(TmpName) - 4, 5)) = '.html')
-         then Operation_Import()
-         else Operation_Search()
+   Case(Mode) of
+      MODE_PAGE: Operation_Search();
+      MODE_IMPORT: Operation_Import();
    end;
    
    db.Quit();
