@@ -98,6 +98,50 @@ begin
    end;
 end;
 
+Procedure Operation_Purge();
+Const
+   RESIZE_STEP = 8;
+Var
+   DirNum, DirLen : sInt;
+   DirList : Array of AnsiString;
+   Search : TSearchRec;
+   ConfDir : AnsiString;
+
+   Procedure AddToList(Const str:AnsiString);
+   begin
+      If(DirLen <= DirNum) then begin
+         DirLen += RESIZE_STEP;
+         SetLength(DirList, DirLen)
+      end;
+      DirList[DirNum] := str;
+      DirNum += 1
+   end;
+
+begin
+   DirNum := 0;
+   DirLen := RESIZE_STEP;
+   SetLength(DirList, DirLen);
+   
+   AddToList('-rfv');
+   ConfDir := GetConfPath();
+   
+   If(FindFirst(GetConfPath() + '*', faDirectory, Search) = 0) then Repeat
+      If((Search.Name = '.') or (Search.Name = '..')) then Continue;
+      If((Search.Attr and faDirectory) = 0) then Continue;
+      
+      AddToList(ConfDir + Search.Name + '/')
+   Until(FindNext(Search) <> 0);
+   FindClose(Search);
+   
+   AddToList(ConfDir + 'fpman.sqlite');
+   SetLength(DirList, DirNum);
+   
+   fpExecLP('rm',DirList);
+   
+   Writeln(stderr, 'fpman: failed to execute rm');
+   Halt(1)
+end;
+
 Procedure Operation_Search();
 Var
    DoQuit : Boolean;
@@ -158,6 +202,9 @@ begin
    
    ParseArgs();
    
+   // Purge doesn't use the database, so we fire it this before any db actions
+   If(Mode = MODE_PURGE) then Operation_Purge();
+   
    If(Not db.Init()) then Halt(1);
    If(Not db.CreateTables()) then Halt(1);
    
@@ -167,5 +214,8 @@ begin
    end;
    
    db.Quit();
-   fpExecLP('man', [TmpName])
+   fpExecLP('man', [TmpName]);
+   
+   Writeln('fpman: failed to execute man');
+   Halt(1)
 end.
