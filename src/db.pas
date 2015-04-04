@@ -27,6 +27,8 @@ Function AddPage(Const Desc:TFunctionDesc):Boolean;
 Function FindPage(PageName:AnsiString; Out rset:TResultSet):Boolean;
 Function NumberOfPages(Out Number:sInt):Boolean;
 
+Function PurgeTables():Boolean;
+
 
 implementation
    uses SysUtils, Conf;
@@ -342,5 +344,57 @@ begin
    
    Exit(True)
 end;
+
+
+Function PurgeTables():Boolean;
+Const
+   TABLE_NUM = 3;
+   TABLES : Array[1 .. TABLE_NUM] of String = (
+      'pages', 'units', 'packages'
+   );
+Var 
+   Idx : sInt;
+   Stat : Psqlite3_stmt;
+   SQL : AnsiString;
+begin
+   For Idx := 1 to TABLE_NUM do begin
+      SQL := 'DELETE FROM `' + TABLES[Idx] + '`';
+      
+      If(sqlite3_prepare(Datab, PChar(SQL), -1, @Stat, NIL) <> SQLITE_OK) then begin
+         Writeln(stderr, 'fpman: failed to prepare ',SQL,' statement: ',sqlite3_errmsg(Datab));
+         Exit(False)
+      end;
+      
+      If(sqlite3_step(Stat) <> SQLITE_DONE) then begin
+         Writeln(stderr, 'fpman: failed to execute ',SQL,' statement: ',sqlite3_errmsg(Datab));
+         Exit(False)
+      end;
+
+      If(sqlite3_finalize(Stat) <> SQLITE_OK) then begin
+         Writeln(stderr, 'fpman: failed to finalize ',SQL,' statement: ',sqlite3_errmsg(Datab));
+         Exit(False)
+      end;
+      
+      SQL := 'UPDATE `sqlite_sequence` SET `seq` = 1 WHERE `name` = '''+TABLES[Idx]+'''';
+      
+      If(sqlite3_prepare(Datab, PChar(SQL), -1, @Stat, NIL) <> SQLITE_OK) then begin
+         Writeln(stderr, 'fpman: failed to prepare UPDATE `sqlite_sequence` statement: ',sqlite3_errmsg(Datab));
+         Exit(False)
+      end;
+      
+      If(sqlite3_step(Stat) <> SQLITE_DONE) then begin
+         Writeln(stderr, 'fpman: failed to execute UPDATE `sqlite_sequence` statement: ',sqlite3_errmsg(Datab));
+         Exit(False)
+      end;
+
+      If(sqlite3_finalize(Stat) <> SQLITE_OK) then begin
+         Writeln(stderr, 'fpman: failed to finalize UPDATE `sqlite_sequence` statement: ',sqlite3_errmsg(Datab));
+         Exit(False)
+      end;
+   end;
+   
+   Exit(True)
+end;
+
 
 end.

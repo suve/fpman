@@ -42,7 +42,7 @@ begin
    {$I-} Rewrite(TmpFile); {$I+}
    If(IOResult() <> 0) then Exit(False);
    
-   OutputTroff(Desc, TmpFile);
+   OutputTroff(TmpFile, Desc, ModeArg);
    Close(TmpFile);
    
    Exit(True)
@@ -133,9 +133,15 @@ begin
    Until(FindNext(Search) <> 0);
    FindClose(Search);
    
-   AddToList(ConfDir + 'fpman.sqlite');
-   SetLength(DirList, DirNum);
+   If(Not PurgeTables()) then begin
+      Writeln(stderr, 'fpman: failed to purge sqlite database tables');
+      Writeln(stderr, 'fpman: fpman.sqlite will be removed');
+      
+      db.Quit();
+      AddToList(ConfDir + 'fpman.sqlite')
+   end;
    
+   SetLength(DirList, DirNum);
    fpExecLP('rm',DirList);
    
    Writeln(stderr, 'fpman: failed to execute rm');
@@ -202,15 +208,13 @@ begin
    
    ParseArgs();
    
-   // Purge doesn't use the database, so we fire it this before any db actions
-   If(Mode = MODE_PURGE) then Operation_Purge();
-   
    If(Not db.Init()) then Halt(1);
    If(Not db.CreateTables()) then Halt(1);
    
    Case(Mode) of
       MODE_PAGE: Operation_Search();
       MODE_IMPORT: Operation_Import();
+      MODE_PURGE: Operation_Purge();
    end;
    
    db.Quit();
