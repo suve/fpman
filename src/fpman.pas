@@ -4,7 +4,7 @@ program fpman;
 
 uses
    SysUtils, Unix,
-   descriptions, parser, troff, db, conf, options;
+   descriptions, parser, troff, db, conf, options, dynarray;
 
 Var
    InputLine, InputStr : AnsiString;
@@ -99,37 +99,23 @@ begin
 end;
 
 Procedure Operation_Purge();
-Const
-   RESIZE_STEP = 8;
+Type
+   TDirList = specialize GenericDynArray<AnsiString>;
 Var
-   DirNum, DirLen : sInt;
-   DirList : Array of AnsiString;
+   DirList : TDirList;
    Search : TSearchRec;
    ConfDir : AnsiString;
-
-   Procedure AddToList(Const str:AnsiString);
-   begin
-      If(DirLen <= DirNum) then begin
-         DirLen += RESIZE_STEP;
-         SetLength(DirList, DirLen)
-      end;
-      DirList[DirNum] := str;
-      DirNum += 1
-   end;
-
 begin
-   DirNum := 0;
-   DirLen := RESIZE_STEP;
-   SetLength(DirList, DirLen);
+   DirList.Create();
    
-   AddToList('-rfv');
+   DirList.Push('-rfv');
    ConfDir := GetConfPath();
    
    If(FindFirst(GetConfPath() + '*', faDirectory, Search) = 0) then Repeat
       If((Search.Name = '.') or (Search.Name = '..')) then Continue;
       If((Search.Attr and faDirectory) = 0) then Continue;
       
-      AddToList(ConfDir + Search.Name + '/')
+      DirList.Push(ConfDir + Search.Name + '/')
    Until(FindNext(Search) <> 0);
    FindClose(Search);
    
@@ -138,11 +124,11 @@ begin
       Writeln(stderr, 'fpman: fpman.sqlite will be removed');
       
       db.Quit();
-      AddToList(ConfDir + 'fpman.sqlite')
+      DirList.Push(ConfDir + 'fpman.sqlite')
    end;
    
-   SetLength(DirList, DirNum);
-   fpExecLP('rm',DirList);
+   DirList.Trim();
+   fpExecLP('rm',DirList.Arr);
    
    Writeln(stderr, 'fpman: failed to execute rm');
    Halt(1)
@@ -154,32 +140,34 @@ Var
    rset : TResultSet;
    Idx : sInt;
 begin
-   If(Not db.FindPage(ParamStr(1), rset)) then begin
+   rset.Create();
+   If(Not db.FindPage(ModeArg, rset)) then begin
+      Writeln(stderr, 'fpman: failed to search in database');
       DoQuit := True
    end else
-   If(rset.numRows <= 0) then begin
-      Writeln(stderr, 'fpman: no entry found for "', ParamStr(1), '"');
+   If(rset.Count <= 0) then begin
+      Writeln(stderr, 'fpman: no entry found for "', ModeArg, '"');
       
       If(Not NumberOfPages(Idx)) then Writeln(stderr, 'fpman: failed to check number of pages in database')
       else If(Idx < 1) then Writeln(stderr, 'fpman: database seems to be empty, consider running fpman --import');
       
       DoQuit := True
    end else
-   If(rset.numRows > 1) then begin
-      Writeln(stderr, 'fpman: multiple entries found for "', ParamStr(1), '":');
-      For Idx := 0 to (rset.numRows - 1) do
+   If(rset.Count > 1) then begin
+      Writeln(stderr, 'fpman: multiple entries found for "', ModeArg, '":');
+      For Idx := 0 to (rset.Count) do
          Writeln(stderr,
             'fpman: ',(Idx+1),': ',
-            rset.Rows[Idx].Package_, '.',
-            rset.Rows[Idx].Unit_, '.',
-            rset.Rows[Idx].Page
+            rset[Idx].Package_, '.',
+            rset[Idx].Unit_, '.',
+            rset[Idx].Page
          );
       DoQuit := True
    end else begin
       TmpName :=
-         LowerCase(rset.Rows[0].Package_) + '/' +
-         LowerCase(rset.Rows[0].Unit_) + '/' +
-         LowerCase(rset.Rows[0].Page) + '.man'
+         LowerCase(rset[0].Package_) + '/' +
+         LowerCase(rset[0].Unit_) + '/' +
+         LowerCase(rset[0].Page) + '.man'
       ;
      
      
@@ -208,8 +196,15 @@ begin
    
    ParseArgs();
    
-   If(Not db.Init()) then Halt(1);
-   If(Not db.CreateTables()) then Halt(1);
+   If(Not db.Init()) then begin
+      Writeln(stderr, 'fpman: failed to open/create fpman.sqlite');
+      Halt(1)
+   end;
+   If(Not db.CreateTables()) then begin
+      Writeln(stderr, 'fpman: failed to create tables');
+      db.Quit();
+      Halt(1)
+   end;
    
    Case(Mode) of
       MODE_PAGE: Operation_Search();

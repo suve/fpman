@@ -4,19 +4,15 @@ unit db;
 
 
 interface
-   uses sqlite3, descriptions;
+   uses sqlite3, descriptions, dynarray;
 
 Type
-   PResultRow = ^TResultRow;
    TResultRow = record
+      ID : sInt;
       Package_, Unit_, Page : AnsiString;
    end;
    
-   PResultSet = ^TResultSet;
-   TResultSet = record
-      NumRows : sInt;
-      Rows : Array of TResultRow
-   end;
+   TResultSet = specialize GenericDynArray<TResultRow>;
 
 Function Init():Boolean;
 Function Quit():Boolean;
@@ -269,9 +265,10 @@ Var
    Code : sInt;
    Stat : Psqlite3_stmt;
    SQL : AnsiString;
+   Row : TResultRow;
 begin
-   rset.NumRows := 0;
-   SQL := 'SELECT `pkg_Name`, `unit_Name`, `page_Name` FROM `view_pages` WHERE (`fullName` LIKE ?)';
+   rset.Purge();
+   SQL := 'SELECT `page_Id`, `pkg_Name`, `unit_Name`, `page_Name` FROM `view_pages` WHERE (`fullName` LIKE ?)';
    
    PageName := StringReplace(PageName, '\', '\\', [rfReplaceAll]);
    PageName := StringReplace(PageName, '_', '\_', [rfReplaceAll]);
@@ -297,13 +294,13 @@ begin
       
       If(Code = SQLITE_DONE) then Break;
    
-      If(Length(rset.Rows) <= rset.NumRows) then SetLength(rset.Rows, rset.numRows + 8);
+      Row.ID := sqlite3_column_int(Stat, 0);
       
-      rset.Rows[rset.numRows].Package_ := sqlite3_column_text(Stat, 0);
-      rset.Rows[rset.numRows].Unit_ := sqlite3_column_text(Stat, 1);
-      rset.Rows[rset.numRows].Page := sqlite3_column_text(Stat, 2);
+      Row.Package_ := sqlite3_column_text(Stat, 1);
+      Row.Unit_ := sqlite3_column_text(Stat, 2);
+      Row.Page := sqlite3_column_text(Stat, 3);
       
-      rset.numRows += 1
+      rset.Push(Row)
    end;
    
    If(sqlite3_finalize(Stat) <> SQLITE_OK) then begin
