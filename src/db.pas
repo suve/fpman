@@ -20,10 +20,11 @@ Function Quit():Boolean;
 Function CreateTables():Boolean;
 Function AddPage(Const Desc:TFunctionDesc):Boolean;
 
-Function FindPage(PageName:AnsiString; Out rset:TResultSet):Boolean;
+Function FindPage(PageName:AnsiString; Var rset:TResultSet):Boolean;
 Function NumberOfPages(Out Number:sInt):Boolean;
 
 Function PurgeTables():Boolean;
+Function DeletePages(Const ID : Array of sInt):Boolean;
 
 
 implementation
@@ -260,7 +261,7 @@ begin
 end;
 
 
-Function FindPage(PageName:AnsiString; Out rset:TResultSet):Boolean;
+Function FindPage(PageName:AnsiString; Var rset:TResultSet):Boolean;
 Var
    Code : sInt;
    Stat : Psqlite3_stmt;
@@ -393,5 +394,33 @@ begin
    Exit(True)
 end;
 
+
+Function DeletePages(Const ID : Array of sInt):Boolean;
+Var 
+   Stat : Psqlite3_stmt;
+   SQL : AnsiString;
+   Idx : sInt;
+begin
+   SQL := 'DELETE FROM `pages` WHERE `page_Id` IN (';
+   For Idx := Low(ID) to High(ID) do SQL += IntToStr(ID[Idx]) + ',';
+   SQL[Length(SQL)] := ')';
+   
+   If(sqlite3_prepare(Datab, PChar(SQL), -1, @Stat, NIL) <> SQLITE_OK) then begin
+      Writeln(stderr, 'fpman: failed to prepare DELETE FROM `pages` statement: ',sqlite3_errmsg(Datab));
+      Exit(False)
+   end;
+   
+   If(sqlite3_step(Stat) <> SQLITE_DONE) then begin
+      Writeln(stderr, 'fpman: failed to execute DELETE FROM `pages` statement: ',sqlite3_errmsg(Datab));
+      Exit(False)
+   end;
+
+   If(sqlite3_finalize(Stat) <> SQLITE_OK) then begin
+      Writeln(stderr, 'fpman: failed to finalize DELETE FROM `pages` statement: ',sqlite3_errmsg(Datab));
+      Exit(False)
+   end;
+   
+   Exit(True)
+end;
 
 end.

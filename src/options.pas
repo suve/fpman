@@ -60,6 +60,7 @@ Var
    opt : Char;
 begin
    Mode := MODE_PAGE;
+   ModeArg := ParamStr(1);
    OptionIndex := 0;
    
    While(True) do begin
