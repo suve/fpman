@@ -46,16 +46,19 @@ begin
    Result := StringReplace(Result, ' ,', ',', [rfReplaceAll]);
    Result := StringReplace(Result, '  ', ' ', [rfReplaceAll]);
    
-   StartPos := Pos('<a href="../', Result);
+   StartPos := Pos('<', Result);
    While(StartPos > 0) do begin
       EndPos := PosEx('>', Result, StartPos);
       Delete(Result, StartPos, EndPos - StartPos + 1);
       
-      StartPos := PosEx('</a>', Result);
-      Delete(Result, StartPos, Length('</a>'));
-      
-      StartPos := Pos('<a href="../', Result)
+      StartPos := Pos('<', Result)
    end;
+   
+   Result := StringReplace(Result, '&lt;', '<', [rfReplaceAll]);
+   Result := StringReplace(Result, '&gt;', '>', [rfReplaceAll]);
+   
+   Result := StringReplace(Result, '&quot;', '"', [rfReplaceAll]);
+   Result := StringReplace(Result, '&amp;', '&', [rfReplaceAll])
 end;
 
 Procedure ParseLocation(Var Func:TFunctionDesc);
@@ -74,7 +77,8 @@ end;
 
 Procedure ParseParagraphs(Var Text:AnsiString);
 Var
-   Source, Line : AnsiString;
+   Source, dlist, Line : AnsiString;
+   ListIdx : sInt;
 begin
    Source := Trim(Text);
    Text := '';
@@ -86,6 +90,33 @@ begin
          
          Text += HTML_to_troff(Line) + #10#10
       end else
+      If(Copy(Source, 1, Length('<dl>')) = '<dl>') then begin
+         Delete(Source, 1, Length('<dl>'));
+         DeleteUntil(Source, '</dl>', @dlist);
+         
+         While(DeleteUntil(dlist, '<dt>')) do begin
+            DeleteUntil(dlist, '</dt>', @Line);
+            Text += '.TP' + #10 + '.B ' + HTML_to_troff(Line) + #10;
+            
+            DeleteUntil(dlist, '<dd>');
+            DeleteUntil(dlist, '</dd>', @Line);
+            Text += HTML_to_troff(Line) + #10
+         end;
+         Text += '.TP 0' + #10
+      end else
+      If(Copy(Source, 1, Length('<ol>')) = '<ol>') then begin
+         Delete(Source, 1, Length('<ol>'));
+         DeleteUntil(Source, '</ol>', @dlist);
+         
+         Text += #10;
+         ListIdx := 0;
+         While(DeleteUntil(dlist, '<li>')) do begin
+            DeleteUntil(dlist, '</li>', @Line);
+            ListIdx += 1;
+            
+            Text += '\fB' + IntToStr(ListIdx) + '.\fR ' + HTML_to_troff(Line) + #10#10
+         end
+      end else
       If(Copy(Source, 1, Length('<table class="remark"')) = '<table class="remark"') then begin
          DeleteUntil(Source, '<td>');
          DeleteUntil(Source, '</td>', @Line);
@@ -96,7 +127,10 @@ begin
          Source := '';
       
       Source := TrimLeft(Source)
-   end
+   end;
+   
+   If(RightStr(Text, Length('.TP 0' + #10)) = '.TP 0' + #10) then
+      Delete(Text, Length(Text) - Length('.TP 0' + #10), Length('.TP 0' + #10))
 end;
 
 Procedure ParseDeclaration(Var Func:TFunctionDesc);
@@ -253,10 +287,17 @@ begin
 end;
 
 Procedure ParseFunctionHTML(HTML:AnsiString;Out Func:TFunctionDesc);
+Var
+   Section, Content : AnsiString;
+   StillParsing : Boolean;
 begin
-   DeleteUntil(HTML, '<span class="bartitle">Reference for unit');
-   DeleteUntil(HTML, '(', @Func.Unit_);
-   DeleteUntil(HTML, ')', @Func.Package_);
+   If(DeleteUntil(HTML, '<span class="bartitle">Reference for unit')) then begin
+      DeleteUntil(HTML, '(', @Func.Unit_);
+      DeleteUntil(HTML, ')', @Func.Package_)
+   end else begin
+      Func.Unit_ := '';
+      Func.Package_ := ''
+   end;
    
    DeleteUntil(HTML, '<h1>');
    DeleteUntil(HTML, '</h1>', @Func.Name);
@@ -264,20 +305,29 @@ begin
    DeleteUntil(HTML, '<p>');
    DeleteUntil(HTML, '</p>', @Func.Summary);
    
-   DeleteUntil(HTML, '</h2>');
-   DeleteUntil(HTML, '<h2>', @Func.Declaration);
+   StillParsing := DeleteUntil(HTML, '<h2>');
+   While(StillParsing) do begin
+      DeleteUntil(HTML, '</h2>', @Section);
+      
+      If(Not DeleteUntil(HTML, '<h2>', @Content)) then begin
+         DeleteUntil(HTML, '<hr>', @Content);
+         StillParsing := False
+      end;
+      
+      Section := LowerCase(Section);
+      Case Section of
+         'declaration': Func.Declaration := Content;
+         'description': Func.Description := Content;
+         'errors': Func.Errors := Content;
+         'see also': Func.SeeAlso := Content
+      end
+   end;
    
-   DeleteUntil(HTML, '</h2>');
-   DeleteUntil(HTML, '<h2>', @Func.Description);
-   
-   DeleteUntil(HTML, '</h2>');
-   DeleteUntil(HTML, '<h2>', @Func.Errors);
-   
-   DeleteUntil(HTML, '</h2>');
-   DeleteUntil(HTML, '<h2>', @Func.SeeAlso);
-   
-   DeleteUntil(HTML, '<span class="footer">');
-   DeleteUntil(HTML, '</span>', @Func.GeneratedOn);
+   If(DeleteUntil(HTML, '<span class="footer">')) then begin
+      DeleteUntil(HTML, '</span>', @Func.GeneratedOn);
+      ParseGeneratedOn(Func)
+   end else
+      Func.GeneratedOn := '';
    
    ParseLocation(Func);
    ParseDeclaration(Func);
@@ -285,8 +335,7 @@ begin
    ParseParagraphs(Func.Description);
    ParseParagraphs(Func.Errors);
    
-   ParseSeeAlso(Func);
-   ParseGeneratedOn(Func)
+   ParseSeeAlso(Func)
 end;
 
 end.
