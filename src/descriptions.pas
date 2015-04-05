@@ -22,7 +22,25 @@ Type
       GeneratedOn : AnsiString;
    end;
 
+Procedure ResetDesc(Var Desc:TFunctionDesc);
+
 
 implementation
+
+Procedure ResetDesc(Var Desc:TFunctionDesc);
+begin
+   Desc.Name := '';
+   Desc.Unit_ := '';
+   Desc.Package_ := '';
+   Desc.File_ := '';
+   Desc.Line_ := '';
+   
+   Desc.Summary := '';
+   Desc.Declaration := '';
+   Desc.Description := '';
+   Desc.Errors := '';
+   Desc.SeeAlso := '';
+   Desc.GeneratedOn := ''
+end;
 
 end.
