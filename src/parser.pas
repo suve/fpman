@@ -10,7 +10,7 @@ Procedure ParseFunctionHTML(HTML:AnsiString;Out Func:TFunctionDesc);
 
 
 implementation
-   uses SysUtils, StrUtils;
+   uses SysUtils, StrUtils, dynarray;
 
 Function DeleteUntil(Var Target:AnsiString; Const Limiter:AnsiString; Const StoreInto:PAnsiString = NIL):Boolean;
 Var
@@ -135,16 +135,147 @@ begin
       Delete(Text, Length(Text) - Length('.TP 0' + #10), Length('.TP 0' + #10))
 end;
 
-Procedure ParseDeclaration(Var Func:TFunctionDesc);
+Procedure Declaration_Routine(Const DeclType:AnsiString; Var Func:TFunctionDesc; Var Source:AnsiString);
 Var
-   Source, DeclType, DeclName : AnsiString;
-   
-   Symb, ReturnType : AnsiString;
+   DeclName, Symb, ReturnType : AnsiString;
    
    Params : Array[0..31] of AnsiString;
    ParamNum, Idx : sInt;
    
    PaQual, PaName, PaType : AnsiString;
+begin
+   DeleteUntil(Source, '<span class="sym">', @DeclName);
+   DeclName := Trim(DeclName);
+   
+   DeleteUntil(Source, '</span>', @Symb);
+   Symb := Trim(Symb);
+   
+   ParamNum := 0;
+   If(Symb = '(') then begin
+      While(DeleteUntil(Source, '<span class="code">')) do begin
+         If(Copy(Source, 1, Length('&nbsp;&nbsp;')) <> '&nbsp;&nbsp;') then Break;
+         Delete(Source, 1, Length('&nbsp;&nbsp;'));
+         
+         If(Copy(Source, 1, Length('<span class="kw">')) = '<span class="kw">') then begin
+            Delete(Source, 1, Length('<span class="kw">'));
+            
+            DeleteUntil(Source, '</span>', @PaQual);
+            PaQual := '\fB' + Trim(PaQual) + '\fR '
+         end else begin
+            PaQual := ''
+         end;
+         
+         DeleteUntil(Source, '<span class="sym">: </span>', @PaName);
+         DeleteUntil(Source, '</span>', @Symb);
+         
+         If(Copy(Symb, 1, 3) = '<a ') then DeleteUntil(Symb, '>');
+         If(Not DeleteUntil(Symb, '<', @PaType)) then PaType := Symb;
+         
+         Params[ParamNum] := PaQual + PaName + ':' + PaType + '; ';
+         ParamNum += 1
+      end;
+      
+      If(DeleteUntil(Source, '<span class="sym">)</span>')) then begin
+         DeleteUntil(Source, '<span class="sym">');
+         DeleteUntil(Source, '</span>', @Symb);
+         Symb := Trim(Symb)
+      end else begin
+         DeleteUntil(Source, '<span class="sym">):</span>');
+         Symb := ':'
+      end
+   end;
+   
+   If(Symb = ':') then begin
+      If(DeleteUntil(Source, '<a href="../')) then begin
+         DeleteUntil(Source, '>');
+         DeleteUntil(Source, '</a>', @ReturnType);
+         
+         DeleteUntil(Source, '<span class="sym">');
+      end else begin
+         DeleteUntil(Source, '<span class="sym">', @ReturnType);
+         ReturnType := Copy(ReturnType, 1, Length(ReturnType) - Length('<span class="sym">'))
+      end;
+      
+      DeleteUntil(Source, '</span>', @Symb);
+      Symb := Trim(Symb);
+   end;
+   
+   If(Symb <> ';') then Exit(); // fuck it
+   If(Func.Declaration <> '') then Func.Declaration += #10#10;
+   
+   Func.Declaration += DeclType + ' ' + '\fB' + DeclName + '\fR';
+   
+   If(ParamNum > 0) then begin
+      Func.Declaration += '(';
+      
+      For Idx := 0 to (ParamNum - 1) do
+         Func.Declaration += Params[Idx];
+      
+      Delete(Func.Declaration, Length(Func.Declaration) - 1, 2);
+      Func.Declaration += ')'
+   end;
+   
+   If(ReturnType <> '') then Func.Declaration += ':' + ReturnType;
+   Func.Declaration += ';'
+end;
+
+Procedure Declaration_Type(Var Func:TFunctionDesc; Var Source:AnsiString);
+Type
+   TMemberRow = record
+      Member, Comment : AnsiString
+   end;
+   
+   TMemberList = specialize GenericDynArray<TMemberRow>;
+Var
+   DeclType, DeclName : AnsiString;
+   MemberName, MemberType, MemberCmt : AnsiString;
+   
+   Member : TMemberRow;
+   Idx, LongestMember : sInt;
+   MemberList:TMemberList;
+begin
+   DeleteUntil(Source, '<span class="sym">', @DeclName);
+   DeclName := Trim(DeclName);
+   
+   DeleteUntil(Source, '<span class="kw">');
+   DeleteUntil(Source, '</span>', @DeclType);
+   DeclType := Trim(DeclType);
+   
+   LongestMember := 0;
+   MemberList.Create();
+   
+   While(DeleteUntil(Source, '<span class="code">&nbsp;&nbsp;')) do begin
+      DeleteUntil(Source, '<span class="sym">', @MemberName);
+      
+      DeleteUntil(Source, '</span>');
+      DeleteUntil(Source, '<span class="sym">', @MemberType);
+      
+      If(DeleteUntil(Source, '<p class="cmt">'))
+         then DeleteUntil(Source, '</p>', @MemberCmt)
+         else MemberCmt := '';
+      
+      MemberName := HTML_to_troff(MemberName) + ': \fB' + HTML_to_troff(MemberType);
+      If(Length(MemberName) > LongestMember) then LongestMember := Length(MemberName);
+      
+      Member.Member := MemberName;
+      Member.Comment := MemberCmt;
+      MemberList.Push(Member)
+   end;
+   
+   Func.Declaration := '\fBtype\fR ' + DeclName + ' = \fB' + DeclType + '\fR';
+   
+   For Idx := 0 to (MemberList.Count - 1) do begin
+      Func.Declaration += #10#32#32 + MemberList[Idx].Member + '\fR;';
+      Func.Declaration += StringOfChar(' ', LongestMember - Length(MemberList[Idx].Member));
+      Func.Declaration += ' // ' + HTML_to_troff(MemberList[Idx].Comment)
+   end;
+   
+   Func.Declaration += #10'.br'#10'\fBend\fR;'
+end; 
+
+Procedure ParseDeclaration(Var Func:TFunctionDesc);
+Var
+   Source, DeclType : AnsiString;
 begin
    Source := Func.Declaration;
    Func.Declaration := '';
@@ -163,80 +294,13 @@ begin
    DeleteUntil(Source, '<table cellpadding="0" cellspacing="0">');
    While(DeleteUntil(Source, '<span class="kw">')) do begin
       DeleteUntil(Source, '</span>', @DeclType);
+      DeclType := LowerCase(Trim(DeclType));
       
-      DeleteUntil(Source, '<span class="sym">', @DeclName);
-      DeclName := Trim(DeclName);
-      
-      DeleteUntil(Source, '</span>', @Symb);
-      Symb := Trim(Symb);
-      
-      ParamNum := 0;
-      If(Symb = '(') then begin
-         While(DeleteUntil(Source, '<span class="code">')) do begin
-            If(Copy(Source, 1, Length('&nbsp;&nbsp;')) <> '&nbsp;&nbsp;') then Break;
-            Delete(Source, 1, Length('&nbsp;&nbsp;'));
-            
-            If(Copy(Source, 1, Length('<span class="kw">')) = '<span class="kw">') then begin
-               Delete(Source, 1, Length('<span class="kw">'));
-               
-               DeleteUntil(Source, '</span>', @PaQual);
-               PaQual := '\fB' + Trim(PaQual) + '\fR '
-            end else begin
-               PaQual := ''
-            end;
-            
-            DeleteUntil(Source, '<span class="sym">: </span>', @PaName);
-            DeleteUntil(Source, '</span>', @Symb);
-            
-            If(Copy(Symb, 1, 3) = '<a ') then DeleteUntil(Symb, '>');
-            If(Not DeleteUntil(Symb, '<', @PaType)) then PaType := Symb;
-            
-            Params[ParamNum] := PaQual + PaName + ':' + PaType + '; ';
-            ParamNum += 1
-         end;
-         
-         If(DeleteUntil(Source, '<span class="sym">)</span>')) then begin
-            DeleteUntil(Source, '<span class="sym">');
-            DeleteUntil(Source, '</span>', @Symb);
-            Symb := Trim(Symb)
-         end else begin
-            DeleteUntil(Source, '<span class="sym">):</span>');
-            Symb := ':'
-         end
-      end;
-      
-      If(Symb = ':') then begin
-         If(DeleteUntil(Source, '<a href="../')) then begin
-            DeleteUntil(Source, '>');
-            DeleteUntil(Source, '</a>', @ReturnType);
-            
-            DeleteUntil(Source, '<span class="sym">');
-         end else begin
-            DeleteUntil(Source, '<span class="sym">', @ReturnType);
-            ReturnType := Copy(ReturnType, 1, Length(ReturnType) - Length('<span class="sym">'))
-         end;
-         
-         DeleteUntil(Source, '</span>', @Symb);
-         Symb := Trim(Symb);
-      end;
-      
-      If(Symb <> ';') then Continue; // fuck it
-      If(Func.Declaration <> '') then Func.Declaration += #10#10;
-      
-      Func.Declaration += DeclType + ' ' + '\fB' + DeclName + '\fR';
-      
-      If(ParamNum > 0) then begin
-         Func.Declaration += '(';
-         
-         For Idx := 0 to (ParamNum - 1) do
-            Func.Declaration += Params[Idx];
-         
-         Delete(Func.Declaration, Length(Func.Declaration) - 1, 2);
-         Func.Declaration += ')'
-      end;
-      
-      If(ReturnType <> '') then Func.Declaration += ':' + ReturnType;
-      Func.Declaration += ';'
+      Case(DeclType) of
+         'procedure': Declaration_Routine('procedure', Func, Source);
+         'function': Declaration_Routine('function', Func, Source);
+         'type': Declaration_Type(Func, Source);
+      end
    end
 end;
 
