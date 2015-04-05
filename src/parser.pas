@@ -42,10 +42,6 @@ begin
    Result := StringReplace(Result, '<em>',  '\fI', [rfReplaceAll]);
    Result := StringReplace(Result, '</em>', '\fR ', [rfReplaceAll]);
    
-   Result := StringReplace(Result, ' .', '.', [rfReplaceAll]);
-   Result := StringReplace(Result, ' ,', ',', [rfReplaceAll]);
-   Result := StringReplace(Result, '  ', ' ', [rfReplaceAll]);
-   
    StartPos := Pos('<', Result);
    While(StartPos > 0) do begin
       EndPos := PosEx('>', Result, StartPos);
@@ -58,7 +54,13 @@ begin
    Result := StringReplace(Result, '&gt;', '>', [rfReplaceAll]);
    
    Result := StringReplace(Result, '&quot;', '"', [rfReplaceAll]);
-   Result := StringReplace(Result, '&amp;', '&', [rfReplaceAll])
+   Result := StringReplace(Result, '&nbsp;', ' ', [rfReplaceAll]);
+   
+   Result := StringReplace(Result, '&amp;', '&', [rfReplaceAll]);
+   
+   Result := StringReplace(Result, '  ', ' ', [rfReplaceAll]);
+   Result := StringReplace(Result, ' .', '.', [rfReplaceAll]);
+   Result := StringReplace(Result, ' ,', ',', [rfReplaceAll])
 end;
 
 Procedure ParseLocation(Var Func:TFunctionDesc);

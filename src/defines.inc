@@ -1,8 +1,8 @@
 {$MODE OBJFPC}
 
 {$MACRO ON}
-{$DEFINE sInt := System.NativeInt  }
-{$DEFINE uInt := System.NativeUInt }
+{$DEFINE sInt := NativeInt  }
+{$DEFINE uInt := NativeUInt }
 {$DEFINE Method := }
 
 {$INLINE ON}
