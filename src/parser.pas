@@ -304,6 +304,11 @@ begin
    DeleteUntil(HTML, '<h1>');
    DeleteUntil(HTML, '</h1>', @Func.Name);
    
+   // Import skips some files, so we check the skip conditions here
+   // This allows us to stop parsing early and save some time
+   If(Trim(Func.Name) = '') then Exit();
+   If(LowerCase(LeftStr(Func.Name, Length('operator '))) = 'operator ') then Exit();
+   
    DeleteUntil(HTML, '<p>');
    DeleteUntil(HTML, '</p>', @Func.Summary);
    

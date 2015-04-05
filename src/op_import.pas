@@ -43,14 +43,14 @@ begin
    Exit(True)
 end;
 
-Function OutputToFile():Boolean;
+Function OutputToFile(Const OriginalFile:AnsiString):Boolean;
 begin
    Assign(TmpFile, TmpName);
    
    {$I-} Rewrite(TmpFile); {$I+}
    If(IOResult() <> 0) then Exit(False);
    
-   OutputTroff(TmpFile, Desc, ModeArg);
+   OutputTroff(TmpFile, Desc, OriginalFile);
    Close(TmpFile);
    
    Exit(True)
@@ -90,7 +90,7 @@ begin
       Writeln(stderr, 'fpman: failed to create cache directory ', CacheDir);
       Exit(-1)
    end else
-   If(Not OutputToFile()) then begin
+   If(Not OutputToFile(FilePath)) then begin
       Writeln(stderr, 'fpman: failed to write cache file ', CacheDir + LowerCase(Desc.Name) + '.man');
       Exit(-1)
    end;

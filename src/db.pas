@@ -21,6 +21,7 @@ Function CreateTables():Boolean;
 Function AddPage(Const Desc:TFunctionDesc):Boolean;
 
 Function FindPage(PageName:AnsiString; Var rset:TResultSet):Boolean;
+Function FindSimilarPages(PageName:AnsiString; Var rset:TResultSet):Boolean;
 Function NumberOfPages(Out Number:sInt):Boolean;
 
 Function PurgeTables():Boolean;
@@ -261,7 +262,117 @@ begin
 end;
 
 
+Function SearchForPage(Const Package_, Unit_, Page : AnsiString; Var rset:TResultSet):Boolean;
+Var
+   ArgIdx, Code : sInt;
+   Stat : Psqlite3_stmt;
+   SQL : AnsiString;
+   Row : TResultRow;
+begin
+   SQL := 'SELECT `page_Id`, `pkg_Name`, `unit_Name`, `page_Name` FROM `view_pages` WHERE (';
+      If(Package_ <> '') then SQL += '`pkg_Name` LIKE ? AND ';
+      If(Unit_ <> '') then SQL += '`unit_Name` LIKE ? AND ';
+      SQL += '`page_Name` LIKE ?';
+   SQL += ')';
+   
+   If(sqlite3_prepare(Datab, PChar(SQL), -1, @Stat, NIL) <> SQLITE_OK) then begin
+      Writeln(stderr, 'fpman: failed to prepare SELECT FROM `view_pages` statement: ',sqlite3_errmsg(Datab));
+      Exit(False)
+   end;
+   
+   ArgIdx := 0;
+   
+   If(Package_ <> '') then begin
+      ArgIdx += 1;
+      If(sqlite3_bind_text(Stat, ArgIdx, PChar(Package_), -1, NIL) <> SQLITE_OK) then begin
+         Writeln(stderr, 'fpman: failed to bind argument for SELECT FROM `view_pages` statement: ',sqlite3_errmsg(Datab));
+         Exit(False)
+   end end;
+   
+   If(Package_ <> '') then begin
+      ArgIdx += 1;
+      If(sqlite3_bind_text(Stat, ArgIdx, PChar(Unit_), -1, NIL) <> SQLITE_OK) then begin
+         Writeln(stderr, 'fpman: failed to bind argument for SELECT FROM `view_pages` statement: ',sqlite3_errmsg(Datab));
+         Exit(False)
+   end end;
+   
+   ArgIdx += 1;
+   If(sqlite3_bind_text(Stat, ArgIdx, PChar(Page), -1, NIL) <> SQLITE_OK) then begin
+      Writeln(stderr, 'fpman: failed to bind argument for SELECT FROM `view_pages` statement: ',sqlite3_errmsg(Datab));
+      Exit(False)
+   end;
+   
+   While(True) do begin
+      Code := sqlite3_step(Stat);
+      If(Not (Code in [SQLITE_DONE, SQLITE_ROW])) then begin
+         Writeln(stderr, 'fpman: failed to execute SELECT FROM `view_pages` statement: ',sqlite3_errmsg(Datab));
+         Exit(False)
+      end;
+      
+      If(Code = SQLITE_DONE) then Break;
+   
+      Row.ID := sqlite3_column_int(Stat, 0);
+      
+      Row.Package_ := sqlite3_column_text(Stat, 1);
+      Row.Unit_ := sqlite3_column_text(Stat, 2);
+      Row.Page := sqlite3_column_text(Stat, 3);
+      
+      rset.Push(Row)
+   end;
+   
+   If(sqlite3_finalize(Stat) <> SQLITE_OK) then begin
+      Writeln(stderr, 'fpman: failed to finalize SELECT FROM `view_pages` statement: ',sqlite3_errmsg(Datab));
+      Exit(False)
+   end;
+   
+   Exit(True)
+end;
+
+
 Function FindPage(PageName:AnsiString; Var rset:TResultSet):Boolean;
+Var
+   Package_, Unit_ : AnsiString;
+   P : sInt;
+begin
+   rset.Purge();
+   
+   // Escape wildcards
+   PageName := StringReplace(PageName, '\', '\\', [rfReplaceAll]);
+   PageName := StringReplace(PageName, '_', '\_', [rfReplaceAll]);
+   PageName := StringReplace(PageName, '%', '\%', [rfReplaceAll]);
+   
+   // Search for page using identifier
+   If(Not SearchForPage('', '', PageName, rset)) then Exit(False);
+   If(rset.Count > 0) then Exit(True);
+   
+   // Look for dot. If not found, return
+   P := Pos('.', PageName);
+   If(P = 0) then Exit(True);
+   
+   // Extract unit from pagename
+   Unit_ := LeftStr(PageName, P - 1);
+   Delete(PageName, 1, P);
+   
+   // Try again with unit + identifier
+   If(Not SearchForPage('', Unit_, PageName, rset)) then Exit(False);
+   If(rset.Count > 0) then Exit(True);
+   
+   // Look for dot again, return if not found
+   P := Pos('.', PageName);
+   If(P = 0) then Exit(True);
+   
+   // Extract parts again
+   Package_ := Unit_;
+   Unit_ := LeftStr(PageName, P - 1);
+   Delete(PageName, 1, P);
+   
+   // Search one last time
+   If(Not SearchForPage(Package_, Unit_, PageName, rset)) then Exit(False);
+   Exit(True);
+end;
+
+
+Function FindSimilarPages(PageName:AnsiString; Var rset:TResultSet):Boolean;
 Var
    Code : sInt;
    Stat : Psqlite3_stmt;
@@ -269,12 +380,14 @@ Var
    Row : TResultRow;
 begin
    rset.Purge();
-   SQL := 'SELECT `page_Id`, `pkg_Name`, `unit_Name`, `page_Name` FROM `view_pages` WHERE (`fullName` LIKE ?)';
    
+   // Escape wildcards
    PageName := StringReplace(PageName, '\', '\\', [rfReplaceAll]);
    PageName := StringReplace(PageName, '_', '\_', [rfReplaceAll]);
    PageName := StringReplace(PageName, '%', '\%', [rfReplaceAll]);
    PageName := '%' + PageName + '%';
+   
+   SQL := 'SELECT `page_Id`, `pkg_Name`, `unit_Name`, `page_Name` FROM `view_pages` WHERE (`fullName` LIKE ?)';
    
    If(sqlite3_prepare(Datab, PChar(SQL), -1, @Stat, NIL) <> SQLITE_OK) then begin
       Writeln(stderr, 'fpman: failed to prepare SELECT FROM `view_pages` statement: ',sqlite3_errmsg(Datab));
@@ -311,7 +424,6 @@ begin
    
    Exit(True)
 end;
-
 
 Function NumberOfPages(Out Number:sInt):Boolean;
 Const
