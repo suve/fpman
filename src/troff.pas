@@ -38,12 +38,17 @@ begin
    
    If(Desc.Declaration <> '') then begin
       Writeln(F,'.SH SYNOPSIS');
-      Writeln(F, Desc.Declaration);
+      Writeln(F, Desc.Declaration)
    end;
    
    If(Desc.Description <> '') then begin
       Writeln(F, '.SH DESCRIPTION');
-      Writeln(F, Desc.Description);
+      Writeln(F, Desc.Description)
+   end;
+   
+   If(Desc.Classifiers <> '') then begin
+      Writeln(F, '.SH NOTES');
+      Writeln(F, 'This identifier is \fI', Desc.Classifiers, '\fR.')
    end;
    
    If(Desc.Errors <> '') then begin
@@ -53,7 +58,7 @@ begin
    
    If(Desc.SeeAlso <> '') then begin
       Writeln(F, '.SH SEE ALSO');
-      Writeln(F, Desc.SeeAlso);
+      Writeln(F, Desc.SeeAlso)
    end;
    
    Writeln(F, '.SH FPMAN');

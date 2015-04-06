@@ -13,6 +13,7 @@ Type
       Package_ : AnsiString;
       File_ : AnsiString;
       Line_ : AnsiString;
+      Classifiers : AnsiString;
       
       Summary : AnsiString;
       Declaration : AnsiString;
@@ -34,6 +35,7 @@ begin
    Desc.Package_ := '';
    Desc.File_ := '';
    Desc.Line_ := '';
+   Desc.Classifiers := '';
    
    Desc.Summary := '';
    Desc.Declaration := '';

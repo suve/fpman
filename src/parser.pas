@@ -29,6 +29,23 @@ begin
    Exit(True)
 end;
 
+Procedure TagToBold(Const OpenTag, CloseTag:AnsiString; Var Target:AnsiString);
+Var
+   StartPos, EndPos : sInt;
+begin
+   StartPos := Pos(OpenTag, Target);
+   While(StartPos > 0) do begin
+      Delete(Target, StartPos, Length(OpenTag));
+      Insert('\fB', Target, StartPos);
+      
+      EndPos := PosEx(CloseTag, Target, StartPos);
+      Delete(Target, EndPos, Length(CloseTag));
+      Insert('\fR', Target, EndPos);
+      
+      StartPos := Pos(OpenTag, Target)
+   end;
+end;
+
 Function HTML_to_troff(Const HTML:AnsiString):AnsiString;
 Var
    StartPos, EndPos : sInt;
@@ -41,6 +58,9 @@ begin
    
    Result := StringReplace(Result, '<em>',  '\fI', [rfReplaceAll]);
    Result := StringReplace(Result, '</em>', '\fR ', [rfReplaceAll]);
+   
+   TagToBold('<span class="kw">', '</span>', Result);
+   TagToBold('<span class="file">', '</span>', Result);
    
    StartPos := Pos('<', Result);
    While(StartPos > 0) do begin
@@ -273,6 +293,33 @@ begin
    Func.Declaration += #10'.br'#10'\fBend\fR;'
 end; 
 
+Procedure Declaration_Var(Const DeclPref:AnsiString; Var Func:TFunctionDesc; Var Source:AnsiString);
+Var
+   DeclName, DeclType, DeclVal : AnsiString;
+begin
+   DeleteUntil(Source, '<span class="sym">', @DeclName);
+   DeclName := Trim(DeclName);
+   
+   If(Source[1] = ':') then begin
+      DeleteUntil(Source, '</span>');
+      DeleteUntil(Source, '<span class="sym">', @DeclType);
+      DeclType := Trim(DeclType)
+   end else
+      DeclType := '';
+   
+   If(Source[1] = '=') then begin
+      DeleteUntil(Source, '</span>');
+      DeleteUntil(Source, '<span class="sym">', @DeclVal);
+      DeclVal := Trim(DeclVal)
+   end else
+      DeclVal := '';
+   
+   Func.Declaration += '\fB' + DeclPref + '\fR ' + DeclName;
+   If(DeclType <> '') then Func.Declaration += ': \fB' + HTML_to_troff(DeclType) + '\fR';
+   If(DeclVal <> '') then Func.Declaration += ' = ' + HTML_to_troff(DeclVal);
+   Func.Declaration += ';'#10
+end;
+
 Procedure ParseDeclaration(Var Func:TFunctionDesc);
 Var
    Source, DeclType : AnsiString;
@@ -299,6 +346,10 @@ begin
       Case(DeclType) of
          'procedure': Declaration_Routine('procedure', Func, Source);
          'function': Declaration_Routine('function', Func, Source);
+         
+         'const': Declaration_Var('const', Func, Source);
+         'var': Declaration_Var('var', Func, Source);
+         
          'type': Declaration_Type(Func, Source);
       end
    end
@@ -318,7 +369,7 @@ begin
       DeleteUntil(Source, '<p class="cmt">');
       DeleteUntil(Source, '</p>', @Desc);
       
-      Func.SeeAlso += '.TP' + #10 + '.B ' + Name + #10 + Desc + #10
+      Func.SeeAlso += '.TP' + #10 + '.B ' + Name + #10 + HTML_to_troff(Desc) + #10
    end
 end;
 
@@ -352,6 +403,19 @@ begin
    Func.GeneratedOn := Year + '-' + Month + '-' + Day
 end;
 
+Procedure ParseName(Var Func:TFunctionDesc);
+Var
+   P : sInt;
+begin
+   P := Pos(' (', Func.Name);
+   If(P = 0) then Exit();
+   
+   Func.Classifiers := Copy(Func.Name, P + 2, Length(Func.Name));
+   Delete(Func.Classifiers, Length(Func.Classifiers), 1);
+   
+   Func.Name := LeftStr(Func.Name, P - 1)
+end;
+
 Procedure ParseFunctionHTML(HTML:AnsiString;Out Func:TFunctionDesc);
 Var
    Section, Content : AnsiString;
@@ -375,6 +439,14 @@ begin
    
    DeleteUntil(HTML, '<p>');
    DeleteUntil(HTML, '</p>', @Func.Summary);
+   
+   // Skip the paragraph with links to [Methods (By Name)] et cetera
+   If((Func.Summary <> '') and (Func.Summary[1] = '[')) then begin
+      DeleteUntil(HTML, '<p>');
+      DeleteUntil(HTML, '</p>', @Func.Summary)
+   end;
+   
+   Func.Summary := HTML_to_troff(Func.Summary);
    
    StillParsing := DeleteUntil(HTML, '<h2>');
    While(StillParsing) do begin
@@ -406,6 +478,7 @@ begin
    ParseParagraphs(Func.Description);
    ParseParagraphs(Func.Errors);
    
+   ParseName(Func);
    ParseSeeAlso(Func)
 end;
 

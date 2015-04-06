@@ -127,11 +127,17 @@ begin
          Continue
       end;
       
+      // Ignore non-html files
       Ext := LowerCase(ExtractFileExt(Search.Name));
       If(Ext <> '.html') then Continue;
       
+      // Ignore unit index files
       Ext := LowerCase(LeftStr(Search.Name, 6));
       If((Ext = 'index.') or (Ext = 'index-')) then Continue;
+      
+      // Ignore identifier index files (e.g. index of class methods)
+      Ext := LowerCase(RightStr(Search.Name, 7));
+      If((Ext[1] = '-') and (Ext[2] in ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'])) then Continue;
       
       Case(ImportFile(PathOnly + Search.Name)) of
          +1: begin
