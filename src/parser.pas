@@ -46,7 +46,7 @@ begin
    end;
 end;
 
-Function HTML_to_troff(Const HTML:AnsiString):AnsiString;
+Function HTML_to_troff(Const HTML:AnsiString; Const EmphasizeAnchors:Boolean = False):AnsiString;
 Var
    StartPos, EndPos : sInt;
 begin
@@ -61,6 +61,22 @@ begin
    
    TagToBold('<span class="kw">', '</span>', Result);
    TagToBold('<span class="file">', '</span>', Result);
+   
+   If(EmphasizeAnchors) then begin
+      StartPos := Pos('<a href="../', Result);
+      While(StartPos > 0) do begin
+         EndPos := PosEx('>', Result, StartPos);
+         Delete(Result, StartPos, EndPos - StartPos + 1);
+         
+         Insert('\fB', Result, StartPos);
+         EndPos := PosEx('</a>', Result, StartPos);
+         
+         Delete(Result, EndPos, Length('</a>'));
+         Insert('\fR', Result, EndPos); 
+         
+         StartPos := Pos('<a href="../', Result)
+      end
+   end;
    
    StartPos := Pos('<', Result);
    While(StartPos > 0) do begin
@@ -110,7 +126,7 @@ begin
          Delete(Source, 1, Length('<p>'));
          DeleteUntil(Source, '</p>', @Line);
          
-         Text += HTML_to_troff(Line) + #10#10
+         Text += HTML_to_troff(Line, TRUE) + #10#10
       end else
       If(Copy(Source, 1, Length('<dl>')) = '<dl>') then begin
          Delete(Source, 1, Length('<dl>'));
@@ -296,6 +312,7 @@ end;
 Procedure Declaration_Var(Const DeclPref:AnsiString; Var Func:TFunctionDesc; Var Source:AnsiString);
 Var
    DeclName, DeclType, DeclVal : AnsiString;
+   IsPtr : Boolean;
 begin
    DeleteUntil(Source, '<span class="sym">', @DeclName);
    DeclName := Trim(DeclName);
@@ -303,20 +320,46 @@ begin
    If(Source[1] = ':') then begin
       DeleteUntil(Source, '</span>');
       DeleteUntil(Source, '<span class="sym">', @DeclType);
-      DeclType := Trim(DeclType)
+      DeclType := HTML_to_troff(DeclType)
    end else
       DeclType := '';
+   
+   If(Source[1] = '[') then begin
+      DeleteUntil(Source, '</span>');
+      DeleteUntil(Source, '<span class="sym">]', @DeclType);
+      
+      DeleteUntil(DeclType, '<span class="sym">.</span><span class="sym">.</span>', @DeclVal);
+      DeclType := HTML_to_troff(DeclVal) + ' .. ' + HTML_to_troff(DeclType);
+      
+      DeleteUntil(Source, '<span class="kw">of</span>');
+      DeleteUntil(Source, '<span class="sym">', @DeclVal);
+      
+      DeclType := '\fBarray[\fR' + DeclType + '\fB] of \fR' + HTML_to_troff(DeclVal)
+   end;
    
    If(Source[1] = '=') then begin
       DeleteUntil(Source, '</span>');
       DeleteUntil(Source, '<span class="sym">', @DeclVal);
-      DeclVal := Trim(DeclVal)
+      DeclVal := HTML_to_troff(DeclVal);
+      
+      If(DeclVal = '') then begin
+         IsPtr := (Source[1] = '@');
+         DeleteUntil(Source, '</span>');
+         
+         DeleteUntil(Source, '<span class="sym">', @DeclVal);
+         DeclVal := HTML_to_troff(DeclVal);
+         
+         If(IsPtr) then DeclVal := '\fB@\fR' + DeclVal
+      end else
+      If(DeclVal[1] = '''') then begin
+         DeclVal := '''\fI' + Copy(DeclVal, 2, Length(DeclVal) - 2) + '\fR'''
+      end
    end else
       DeclVal := '';
    
    Func.Declaration += '\fB' + DeclPref + '\fR ' + DeclName;
-   If(DeclType <> '') then Func.Declaration += ': \fB' + HTML_to_troff(DeclType) + '\fR';
-   If(DeclVal <> '') then Func.Declaration += ' = ' + HTML_to_troff(DeclVal);
+   If(DeclType <> '') then Func.Declaration += ': \fB' + DeclType + '\fR';
+   If(DeclVal <> '') then Func.Declaration += ' = ' + DeclVal;
    Func.Declaration += ';'#10
 end;
 
