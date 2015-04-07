@@ -258,13 +258,13 @@ end;
 Procedure Declaration_Type(Var Func:TFunctionDesc; Var Source:AnsiString);
 Type
    TMemberRow = record
-      Member, Comment : AnsiString
+      Prefix, Name, Type_, Suffix, Comment : AnsiString;
+      Length : sInt;
    end;
    
    TMemberList = specialize GenericDynArray<TMemberRow>;
 Var
-   DeclType, DeclName : AnsiString;
-   MemberName, MemberType, MemberCmt : AnsiString;
+   DeclType, DeclName, Fragment, MemberString : AnsiString;
    
    Member : TMemberRow;
    Idx, LongestMember : sInt;
@@ -273,37 +273,135 @@ begin
    DeleteUntil(Source, '<span class="sym">', @DeclName);
    DeclName := Trim(DeclName);
    
-   DeleteUntil(Source, '<span class="kw">');
+   (* After name of type, '<span class="sym"> = </span>' always follows.
+    * 
+    * Complex types (records, objects, classes) will have '<span class="kw">STRUCT_TYPE</span>' after that.
+    * Pointers will have '<span class="sym">^</span>'.
+    * Type aliases will have neither, but the test will match the closing '<span class="sym">;</span>'.
+    * 
+    * Checking span class is an easy way to distinguish between those.
+    *)
+   DeleteUntil(Source, '</span>');
+   DeleteUntil(Source, '<span class="', @DeclType);
+   If(LeftStr(Source, 3) = 'sym') then begin
+      DeleteUntil(Source, '>');
+      
+      If(Source[1] = '^') then begin
+         DeleteUntil(Source, '</span>');
+         DeleteUntil(Source, '<span class="sym">', @DeclType);
+         
+         Func.Declaration := '\fBtype\fR ' + DeclName + ' = \fB^\fR' + HTML_to_troff(DeclType) + ';'
+      end else begin
+         
+         Func.Declaration := '\fBtype\fR ' + DeclName + ' = ' + HTML_to_troff(DeclType) + ';'
+      end;
+      
+      Exit()
+   end;
+   
+   DeleteUntil(Source, '>');
    DeleteUntil(Source, '</span>', @DeclType);
    DeclType := Trim(DeclType);
+   
+   (* Pascal has this wonderful thing where you can declare two types that are functionally identical,
+    * but distinct for purposes of type checking, RTTI, and so on.
+    *
+    * These are done by typing in a 'type XXX = type YYY;' declaration.
+    *
+    * These types will have '<span class="kw">type</span>' after the '<span class="sym"> = </span>',
+    * thus they won't match the test above for '<span class="sym">'.
+    *
+    * Thus, we have to check if DeclType isn't "type". If this is the case, 
+    * we extract the name of the original type and quickly GTFO.
+    *)
+   If(DeclType = 'type') then begin
+      DeleteUntil(Source, '<span class="sym">;', @DeclType);
+      Func.Declaration := '\fBtype\fR ' + DeclName + ' = \fBtype\fR ' + HTML_to_troff(DeclType) + ';';
+      
+      Exit()
+   end;
    
    LongestMember := 0;
    MemberList.Create();
    
    While(DeleteUntil(Source, '<span class="code">&nbsp;&nbsp;')) do begin
-      DeleteUntil(Source, '<span class="sym">', @MemberName);
+      If(LeftStr(Source, Length('<span class="kw">')) = '<span class="kw">') then begin
+         Delete(Source, 1, Length('<span class="kw">'));
+         DeleteUntil(Source, '</span>', @Member.Prefix);
+         
+         Member.Prefix := HTML_to_troff(Member.Prefix)
+      end else
+         Member.Prefix := '';
+      
+      DeleteUntil(Source, '<span class="sym">', @Member.Name);
+      
+      If(Source[1] = ':') then begin
+         DeleteUntil(Source, '</span>');
+         DeleteUntil(Source, '<span class="sym">', @Member.Type_);
+         
+         Member.Type_ := HTML_to_troff(Member.Type_)
+      end else
+         Member.Type_ := '';
       
       DeleteUntil(Source, '</span>');
-      DeleteUntil(Source, '<span class="sym">', @MemberType);
+      
+      Member.Suffix := '';
+      While(LeftStr(Source, Length('<span class="kw">')) = '<span class="kw">') do begin
+         Delete(Source, 1, Length('<span class="kw">'));
+         DeleteUntil(Source, '</span>', @Fragment);
+         
+         If(Member.Suffix <> '') then Member.Suffix += '; ';
+         Member.Suffix += HTML_to_troff(Fragment);
+         
+         DeleteUntil(Source, '<span class="sym">;</span>');
+      end;
       
       If(DeleteUntil(Source, '<p class="cmt">'))
-         then DeleteUntil(Source, '</p>', @MemberCmt)
-         else MemberCmt := '';
+         then DeleteUntil(Source, '</p>', @Member.Comment)
+         else Member.Comment := '';
       
-      MemberName := HTML_to_troff(MemberName) + ': \fB' + HTML_to_troff(MemberType);
-      If(Length(MemberName) > LongestMember) then LongestMember := Length(MemberName);
+      Member.Name := HTML_to_troff(Member.Name);
+      Member.Type_ := HTML_to_troff(Member.Type_);
       
-      Member.Member := MemberName;
-      Member.Comment := MemberCmt;
+      Member.Length := Length(Member.Name);
+      If(Member.Prefix <> '') then Member.Length += Length(Member.Prefix) + 1; // 1 = ' '
+      If(Member.Type_ <> '') then Member.Length += Length(Member.Type_) + 2; // 2 = ': '
+      If(Member.Suffix <> '') then Member.Length += Length(Member.Suffix) + 2; // 1 = ' ;'
+      
+      If(Member.Length > LongestMember) then LongestMember := Member.Length;
+      
       MemberList.Push(Member)
    end;
    
    Func.Declaration := '\fBtype\fR ' + DeclName + ' = \fB' + DeclType + '\fR';
    
    For Idx := 0 to (MemberList.Count - 1) do begin
-      Func.Declaration += #10#32#32 + MemberList[Idx].Member + '\fR;';
-      Func.Declaration += StringOfChar(' ', LongestMember - Length(MemberList[Idx].Member));
-      Func.Declaration += ' // ' + HTML_to_troff(MemberList[Idx].Comment)
+      Member := MemberList[Idx];
+      MemberString := #10#32#32;
+      
+      If(Member.Prefix <> '') then MemberString += '\fB' + Member.Prefix + '\fR ';
+      
+      MemberString += Member.Name;
+      
+      If(Member.Type_ <> '') then MemberString += ': \fB' + Member.Type_ + '\fR';
+      
+      MemberString += ';';
+      
+      If(Member.Suffix <> '') then begin
+         MemberString += ' ';
+         
+         While(DeleteUntil(Member.Suffix, '; ', @Fragment)) do 
+            MemberString += '\fB' + Fragment + '\fR; ';
+         
+         MemberString += '\fB' + Member.Suffix + '\fR;'
+      end;
+      
+      If(Member.Comment <> '') then begin
+         MemberString += StringOfChar(' ', LongestMember - Member.Length);
+         MemberString += ' // ' + HTML_to_troff(Member.Comment)
+      end;
+      
+      Func.Declaration += MemberString
    end;
    
    Func.Declaration += #10'.br'#10'\fBend\fR;'
