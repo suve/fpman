@@ -35,7 +35,7 @@ begin
       '                      or a directory to scan for .html files. Subdirectories'    + #13#10 +
       '                      will be scanned recursively.'                              + #13#10 +
       ' --purge              Cleans fpman cache directory and sqlite database.'         + #13#10 +
-      ' --rebuild            Rebuilds fpman sqlite database based on files found   '    + #13#10 +
+      ' --rebuild            Rebuilds fpman sqlite database based on files found'       + #13#10 +
       '                      in the cache directory.'                                   + #13#10 +
       ' --revalidate         Like --rebuild, but instead of recreating the database'    + #13#10 +
       '                      from scratch, takes all entries and checks if their'       + #13#10 +

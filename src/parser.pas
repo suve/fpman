@@ -94,9 +94,20 @@ begin
    
    Result := StringReplace(Result, '&amp;', '&', [rfReplaceAll]);
    
-   Result := StringReplace(Result, '  ', ' ', [rfReplaceAll]);
-   Result := StringReplace(Result, ' .', '.', [rfReplaceAll]);
-   Result := StringReplace(Result, ' ,', ',', [rfReplaceAll])
+   // Remove all double spaces, and spaces before ,.;)] symbols
+   StartPos := 1;
+   EndPos := PosEx(' ', Result, StartPos);
+   While(EndPos > 0) do begin
+      If(EndPos = Length(Result)) then Break;
+      
+      If(Result[EndPos + 1] in [' ',',','.',')',';',']']) then begin
+         Delete(Result, EndPos, 1);
+         StartPos := EndPos
+      end else
+         StartPos := EndPos + 1;
+      
+      EndPos := PosEx(' ', Result, StartPos)
+   end
 end;
 
 Procedure ParseLocation(Var Func:TFunctionDesc);
@@ -187,6 +198,16 @@ begin
    Symb := Trim(Symb);
    
    ParamNum := 0;
+   
+   If(Symb = '.') then begin
+      DeleteUntil(Source, '<span class="sym">', @Symb);
+      
+      DeclName += '.' + Symb;
+      
+      DeleteUntil(Source, '</span>', @Symb);
+      Symb := Trim(Symb)
+   end;
+   
    If(Symb = '(') then begin
       While(DeleteUntil(Source, '<span class="code">')) do begin
          If(Copy(Source, 1, Length('&nbsp;&nbsp;')) <> '&nbsp;&nbsp;') then Break;
@@ -222,24 +243,17 @@ begin
    end;
    
    If(Symb = ':') then begin
-      If(DeleteUntil(Source, '<a href="../')) then begin
-         DeleteUntil(Source, '>');
-         DeleteUntil(Source, '</a>', @ReturnType);
-         
-         DeleteUntil(Source, '<span class="sym">');
-      end else begin
-         DeleteUntil(Source, '<span class="sym">', @ReturnType);
-         ReturnType := Copy(ReturnType, 1, Length(ReturnType) - Length('<span class="sym">'))
-      end;
+      DeleteUntil(Source, '<span class="sym">', @ReturnType);
+      ReturnType := HTML_to_troff(ReturnType);
       
       DeleteUntil(Source, '</span>', @Symb);
-      Symb := Trim(Symb);
+      Symb := Trim(Symb)
    end;
    
    If(Symb <> ';') then Exit(); // fuck it
    If(Func.Declaration <> '') then Func.Declaration += #10#10;
    
-   Func.Declaration += DeclType + ' ' + '\fB' + DeclName + '\fR';
+   Func.Declaration += DeclType + ' ' + '\fB' + HTML_to_troff(DeclName) + '\fR';
    
    If(ParamNum > 0) then begin
       Func.Declaration += '(';
@@ -251,24 +265,36 @@ begin
       Func.Declaration += ')'
    end;
    
-   If(ReturnType <> '') then Func.Declaration += ':' + ReturnType;
+   If(ReturnType <> '') then Func.Declaration += ':' + HTML_to_troff(ReturnType);
    Func.Declaration += ';'
+end;
+
+Procedure Declaration_Method(Const Visibility:AnsiString; Var Func:TFunctionDesc; Var Source:AnsiString);
+Var
+   DeclKw : AnsiString;
+begin
+   DeleteUntil(Source, '<span class="kw">');
+   DeleteUntil(Source, '</span>', @DeclKw);
+   
+   Declaration_Routine(Visibility + ' ' + DeclKw, Func, Source);
 end;
 
 Procedure Declaration_Type(Var Func:TFunctionDesc; Var Source:AnsiString);
 Type
    TMemberRow = record
-      Prefix, Name, Type_, Suffix, Comment : AnsiString;
+      Visibility, Prefix, Name, Type_, Suffix, RW, Comment : AnsiString;
       Length : sInt;
    end;
    
    TMemberList = specialize GenericDynArray<TMemberRow>;
 Var
-   DeclType, DeclName, Fragment, MemberString : AnsiString;
+   DeclType, DeclName, Fragment, MemberString, Visibility : AnsiString;
    
    Member : TMemberRow;
    Idx, LongestMember : sInt;
    MemberList:TMemberList;
+   
+   CommentPos, NextMemberPos: sInt;
 begin
    DeleteUntil(Source, '<span class="sym">', @DeclName);
    DeclName := Trim(DeclName);
@@ -321,17 +347,32 @@ begin
       Exit()
    end;
    
+   // Check if there's an opening parenthesis after decltype.
+   // If yes, then this is a child object/class and we gotta parse inheritance.
+   If(LeftStr(Source, Length('<span class="sym">(')) = '<span class="sym">(') then begin
+      Delete(Source, 1, Length('<span class="sym">('));
+      DeleteUntil(Source, '<span class="sym">)</span>', @Fragment);
+      
+      DeclType += ' (' + HTML_to_troff(Fragment) + ')'
+   end;
+   
+   Visibility := '';
    LongestMember := 0;
    MemberList.Create();
    
-   While(DeleteUntil(Source, '<span class="code">&nbsp;&nbsp;')) do begin
+   While(DeleteUntil(Source, '<span class="code">&nbsp;&nbsp;', @Fragment)) do begin
+      If(DeleteUntil(Fragment, '<span class="code"><span class="kw">')) then begin
+         DeleteUntil(Fragment, '</span></span>', @Visibility)
+      end;
+      
+      Member.Visibility := Visibility;
+      
       If(LeftStr(Source, Length('<span class="kw">')) = '<span class="kw">') then begin
          Delete(Source, 1, Length('<span class="kw">'));
-         DeleteUntil(Source, '</span>', @Member.Prefix);
+         DeleteUntil(Source, '</span>', @Fragment);
          
-         Member.Prefix := HTML_to_troff(Member.Prefix)
-      end else
-         Member.Prefix := '';
+         Member.Prefix := HTML_to_troff(Fragment)
+      end;
       
       DeleteUntil(Source, '<span class="sym">', @Member.Name);
       
@@ -356,9 +397,19 @@ begin
          DeleteUntil(Source, '<span class="sym">;</span>');
       end;
       
-      If(DeleteUntil(Source, '<p class="cmt">'))
-         then DeleteUntil(Source, '</p>', @Member.Comment)
-         else Member.Comment := '';
+      If(LeftStr(Source, Length('  [')) = '  [') then begin
+         Delete(Source, 1, Length('  ['));
+         DeleteUntil(Source, ']', @Member.RW);
+      end else
+         Member.RW := '';
+      
+      CommentPos := Pos('<p class="cmt">', Source);
+      NextMemberPos := Pos('<span class="code">&nbsp;&nbsp;', Source);
+      If((CommentPos > 0) AND ((NextMemberPos = 0) OR (CommentPos < NextMemberPos))) then begin
+         DeleteUntil(Source, '<p class="cmt">');
+         DeleteUntil(Source, '</p>', @Member.Comment)
+      end else
+         Member.Comment := '';
       
       Member.Name := HTML_to_troff(Member.Name);
       Member.Type_ := HTML_to_troff(Member.Type_);
@@ -367,6 +418,7 @@ begin
       If(Member.Prefix <> '') then Member.Length += Length(Member.Prefix) + 1; // 1 = ' '
       If(Member.Type_ <> '') then Member.Length += Length(Member.Type_) + 2; // 2 = ': '
       If(Member.Suffix <> '') then Member.Length += Length(Member.Suffix) + 2; // 1 = ' ;'
+      If(Member.RW <> '') then Member.Length += Length(Member.RW) + 3; // 3 = ' []'
       
       If(Member.Length > LongestMember) then LongestMember := Member.Length;
       
@@ -374,10 +426,16 @@ begin
    end;
    
    Func.Declaration := '\fBtype\fR ' + DeclName + ' = \fB' + DeclType + '\fR';
+   Visibility := '';
    
    For Idx := 0 to (MemberList.Count - 1) do begin
       Member := MemberList[Idx];
-      MemberString := #10#32#32;
+      
+      If(Member.Visibility <> Visibility) then begin
+         Visibility := Member.Visibility;
+         MemberString := #10 + '.br' + #10 + '\fB' + Visibility + '\fR' + #10#32#32
+      end else
+         MemberString := #10#32#32;
       
       If(Member.Prefix <> '') then MemberString += '\fB' + Member.Prefix + '\fR ';
       
@@ -395,6 +453,8 @@ begin
          
          MemberString += '\fB' + Member.Suffix + '\fR;'
       end;
+      
+      If(Member.RW <> '') then MemberString += ' [' + Member.RW + ']';
       
       If(Member.Comment <> '') then begin
          MemberString += StringOfChar(' ', LongestMember - Member.Length);
@@ -485,6 +545,15 @@ begin
       DeclType := LowerCase(Trim(DeclType));
       
       Case(DeclType) of
+         'strict':    Declaration_Method('strict'   , Func, Source); // strict private, yay
+         'private':   Declaration_Method('private'  , Func, Source); 
+         'protected': Declaration_Method('protected', Func, Source); 
+         'public':    Declaration_Method('public'   , Func, Source); 
+         'published': Declaration_Method('published', Func, Source); 
+         
+         'virtual': Func.Declaration += ' \fBvirtual\fR;';
+         'abstract': Func.Declaration += ' \fBabstract\fR;';
+         
          'procedure': Declaration_Routine('procedure', Func, Source);
          'function': Declaration_Routine('function', Func, Source);
          

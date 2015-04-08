@@ -82,7 +82,7 @@ begin
    end;
    
    If(LowerCase(LeftStr(Desc.Name, Length('operator '))) = 'operator ') then begin
-      Writeln(stderr, 'fpman: ',FilePath,' describes an operator, skipping import');
+      Writeln(stderr, 'fpman: ',FilePath,' describes an operator, skipping');
       Exit(0)
    end;
    
@@ -138,6 +138,13 @@ begin
       // Ignore identifier index files (e.g. index of class methods)
       Ext := LowerCase(RightStr(Search.Name, 7));
       If((Ext[1] = '-') and (Ext[2] in ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'])) then Continue;
+      
+      // Ignore operators
+      If(LowerCase(LeftStr(Search.Name, 3)) = 'op-') then begin
+         Writeln(stderr, 'fpman: ',PathOnly + Search.Name,' describes an operator, skipping');
+         SkipPages += 1;
+         Continue
+      end;
       
       Case(ImportFile(PathOnly + Search.Name)) of
          +1: begin
