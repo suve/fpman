@@ -34,6 +34,8 @@ Var
    StartPos, EndPos : sInt;
 begin
    Result := Trim(HTML);
+   If(Result = '') then Exit();
+   
    Result := StringReplace(Result, '\', '\\', [rfReplaceAll]);
       
    Result := StringReplace(Result, '<var>',  '\fB', [rfReplaceAll]);
@@ -200,18 +202,23 @@ begin
             Delete(Source, 1, Length('<span class="kw">'));
             
             DeleteUntil(Source, '</span>', @PaQual);
-            PaQual := '\fB' + Trim(PaQual) + '\fR '
+            PaQual := '\fB' + HTML_to_troff(PaQual) + '\fR '
          end else begin
             PaQual := ''
          end;
          
-         DeleteUntil(Source, '<span class="sym">: </span>', @PaName);
+         DeleteUntil(Source, '<span class="sym">', @PaName);
          DeleteUntil(Source, '</span>', @Symb);
          
-         If(Copy(Symb, 1, 3) = '<a ') then DeleteUntil(Symb, '>');
-         If(Not DeleteUntil(Symb, '<', @PaType)) then PaType := Symb;
+         If(Trim(Symb) = ':') then begin
+            If(LeftStr(Source, Length('<a href="../')) = '<a href="../') then DeleteUntil(Source, '>');
+            DeleteUntil(Source, '<', @PaType)
+         end else
+            PaType := '';
          
-         Params[ParamNum] := PaQual + PaName + ':' + PaType + '; ';
+         Params[ParamNum] := PaQual + HTML_to_troff(PaName);
+         If(PaType <> '') then Params[ParamNum] += ':' + HTML_to_troff(PaType);
+         Params[ParamNum] += '; ';
          ParamNum += 1
       end;
       
