@@ -28,19 +28,19 @@ implementation
 Function Usage():AnsiString;
 begin
    Result :=
-      'Usage: fpman [OPTION...] [page]'                                                 + #13#10 +
-      ' --help               Display this help list.'                                   + #13#10 +
-      ' --import PATH        Imports .html documentation files from PATH to fpman'      + #13#10 +
-      '                      library. PATH can specify either a single file to import,' + #13#10 + 
-      '                      or a directory to scan for .html files. Subdirectories'    + #13#10 +
-      '                      will be scanned recursively.'                              + #13#10 +
-      ' --purge              Cleans fpman cache directory and sqlite database.'         + #13#10 +
-      ' --rebuild            Rebuilds fpman sqlite database based on files found'       + #13#10 +
-      '                      in the cache directory.'                                   + #13#10 +
-      ' --revalidate         Like --rebuild, but instead of recreating the database'    + #13#10 +
-      '                      from scratch, takes all entries and checks if their'       + #13#10 +
-      '                      manpages are still in cache, removing dead entries.'       + #13#10 +
-      ' --version            Displays version information and exists.'                  + #13#10 +
+      'Usage: fpman [OPTION...] [page]'                                                 + #10 +
+      ' --help               Display this help list.'                                   + #10 +
+      ' --import PATH        Imports .html documentation files from PATH to fpman'      + #10 +
+      '                      library. PATH can specify either a single file to import,' + #10 + 
+      '                      or a directory to scan for .html files. Subdirectories'    + #10 +
+      '                      will be scanned recursively.'                              + #10 +
+      ' --purge              Cleans fpman cache directory and sqlite database.'         + #10 +
+      ' --rebuild            Rebuilds fpman sqlite database based on files found'       + #10 +
+      '                      in the cache directory.'                                   + #10 +
+      ' --revalidate         Like --rebuild, but instead of recreating the database'    + #10 +
+      '                      from scratch, takes all entries and checks if their'       + #10 +
+      '                      manpages are still in cache, removing dead entries.'       + #10 +
+      ' --version            Displays version information and exists.'                  + #10 +
    ''
 end;
 

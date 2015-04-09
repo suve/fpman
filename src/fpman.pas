@@ -5,7 +5,7 @@ program fpman;
 uses
    SysUtils,
    db, options,
-   op_import, op_purge, op_revalidate, op_search;
+   op_import, op_purge, op_rebuild, op_revalidate, op_search;
 
 
 // fpman.main()
@@ -31,6 +31,7 @@ begin
       MODE_PAGE: Operation_Search();
       MODE_IMPORT: Operation_Import();
       MODE_PURGE: Operation_Purge();
+      MODE_REBUILD: Operation_Rebuild();
       MODE_REVALIDATE: Operation_Revalidate();
    end;
    
