@@ -1,10 +1,10 @@
 ." manpage for fpman
-." contact veg [at] svgames.pl to correct typos and errors
+." contact suve [at] svgames.pl to correct typos and errors
 
-.TH fpman 1 "2015-04-05" "0.4.0" "manpages for free pascal"
+.TH fpman 1 "2015-04-09" "1.0.0" "manpages for free pascal"
 
 .SH NAME
-\fBfpman\fR - manpages for free pascal
+\fBfpman\fR - manpages for Free Pascal
 
 .SH SYNOPSIS
 \fBfpman\fR [OPTION...] [PAGE]
@@ -20,15 +20,18 @@ storing them in a database in the user's home directory for quick access.
 Display a summary of available options and exit.
 .TP
 \fI--import\fR=PATH
-Imports HTML files into database. PATH can specify either a file, 
+Import .html or .man files into database. PATH can specify either a file, 
 or a directory, in which case it will be scanned recursively for files.
 .TP
 \fI--purge\fR
-Cleans fpman sqlite database and manpage cache directory.
+Clean fpman sqlite database and manpage library directory.
+.TP
+\fI--rebuild\fR
+Rebuild fpman sqlite database based on files found in the library directory.
 .TP
 \fI--revalidate\fR
 For every page listed in the sqlite database, check if its manpage
-is present in the cache directory. Removes dead entries.
+is present in the library directory. Remove dead entries.
 .TP
 \fI--version\fR
 Display version information and exit.
@@ -61,4 +64,4 @@ Public repository available at https://github.com/suve/fpman
 Tarball for current stable release available at author's homepage. http://svgames.pl
 
 .SH AUTHOR
-suve (veg [at] svgames.pl)
+suve (suve [at] svgames.pl)

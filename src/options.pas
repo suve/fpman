@@ -28,18 +28,18 @@ implementation
 Function Usage():AnsiString;
 begin
    Result :=
-      'Usage: fpman [OPTION...] [page]'                                                 + #10 +
+      'Usage: fpman OPTION | PAGE '                                                     + #10 +
       ' --help               Display this help list.'                                   + #10 +
-      ' --import PATH        Imports .html documentation files from PATH to fpman'      + #10 +
-      '                      library. PATH can specify either a single file to import,' + #10 + 
-      '                      or a directory to scan for .html files. Subdirectories'    + #10 +
-      '                      will be scanned recursively.'                              + #10 +
-      ' --purge              Cleans fpman cache directory and sqlite database.'         + #10 +
+      ' --import PATH        Imports .html or .man documentation files from PATH to'    + #10 +
+      '                      fpman library. PATH can specify either a single file to'   + #10 + 
+      '                      import, or a directory to scan for .html/.man files.'      + #10 +
+      '                      Subdirectories will be scanned recursively.'               + #10 +
+      ' --purge              Cleans fpman library directory and sqlite database.'       + #10 +
       ' --rebuild            Rebuilds fpman sqlite database based on files found'       + #10 +
-      '                      in the cache directory.'                                   + #10 +
+      '                      in the library directory.'                                 + #10 +
       ' --revalidate         Like --rebuild, but instead of recreating the database'    + #10 +
       '                      from scratch, takes all entries and checks if their'       + #10 +
-      '                      manpages are still in cache, removing dead entries.'       + #10 +
+      '                      manpages are still in library, removing dead entries.'     + #10 +
       ' --version            Displays version information and exists.'                  + #10 +
    ''
 end;
