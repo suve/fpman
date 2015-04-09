@@ -23,12 +23,12 @@ Type
       GeneratedOn : AnsiString;
    end;
 
-Procedure ResetDesc(Var Desc:TFunctionDesc);
+Procedure ResetDesc(Out Desc:TFunctionDesc);
 
 
 implementation
 
-Procedure ResetDesc(Var Desc:TFunctionDesc);
+Procedure ResetDesc(Out Desc:TFunctionDesc);
 begin
    Desc.Name := '';
    Desc.Unit_ := '';
