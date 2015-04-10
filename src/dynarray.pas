@@ -101,8 +101,8 @@ begin
       then _Step := STEP_DEFAULT
       else _Step := ResizeStep;
    
-   _Len := 0; _Num := 0;
-   SetLength(_Arr, 0)
+   _Len := _Step; _Num := 0;
+   SetLength(_Arr, _Len)
 end;
 
 Destructor GenericDynArray.Destroy();

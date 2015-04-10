@@ -29,10 +29,14 @@ Function DeletePages(Const ID : Array of sInt):Boolean;
 
 
 implementation
-   uses SysUtils, Conf;
+   uses SysUtils, Conf, dictionary;
+
+Type
+   TIDDict = specialize GenericDictionary<sInt>;
 
 Var
    Datab : Psqlite3;
+   PkgDict, UnitDict: TIDDict;
 
 Function Init():Boolean;
 Var
@@ -55,6 +59,9 @@ end;
 
 Function Quit():Boolean;
 begin
+   PkgDict.Purge();
+   UnitDict.Purge();
+   
    If(sqlite3_close(Datab) <> SQLITE_OK) then begin
       Writeln(stderr, 'fpman: failed to close fpman.sqlite: ',sqlite3_errmsg(Datab));
       Exit(False)
@@ -139,6 +146,10 @@ begin
          Exit(False)
       end;
    end;
+   
+   PkgDict.Create(-1, 4);
+   UnitDict.Create(-1, 16);
+   
    Exit(True)
 end;
 
@@ -243,14 +254,25 @@ Function AddPage(Const Desc:TFunctionDesc):Boolean;
 Var
    PackageId, UnitId, PageId : sInt;
 begin
-   If(Not GetID(PackageId, 'packages', 'pkg_Name', Desc.Package_)) then begin
-      Writeln(stderr, 'fpman: failed to SELECT / INSERT package from database');
-      Exit(False)
-   end;
-   
-   If(Not GetID(UnitId, 'units', 'unit_Name', Desc.Unit_, PackageId, 'unit_pkgId')) then begin
-      Writeln(stderr, 'fpman: failed to SELECT / INSERT unit from database');
-      Exit(False)
+   UnitId := UnitDict[Desc.Package_ + '.' + Desc.Unit_];
+   If(UnitId < 0) then begin
+      
+      PackageId := PkgDict[Desc.Package_];
+      If(PackageId < 0) then begin
+         If(Not GetID(PackageId, 'packages', 'pkg_Name', Desc.Package_)) then begin
+            Writeln(stderr, 'fpman: failed to SELECT / INSERT package from database');
+            Exit(False)
+         end;
+         
+         PkgDict[Desc.Package_] := PackageId
+      end;
+      
+      If(Not GetID(UnitId, 'units', 'unit_Name', Desc.Unit_, PackageId, 'unit_pkgId')) then begin
+         Writeln(stderr, 'fpman: failed to SELECT / INSERT unit from database');
+         Exit(False)
+      end;
+      
+      UnitDict[Desc.Package_ + '.' + Desc.Unit_] := UnitId
    end;
    
    If(Not GetID(PageId, 'pages', 'page_Name', Desc.Name, UnitId, 'page_unitId')) then begin
@@ -502,6 +524,9 @@ begin
          Exit(False)
       end;
    end;
+   
+   PkgDict.Purge();
+   UnitDict.Purge();
    
    Exit(True)
 end;
