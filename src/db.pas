@@ -197,14 +197,15 @@ begin
    Exit(True)
 end;
 
-Function SelectID(Out ID:sInt; Const TableName, NameCol, SearchFor:AnsiString):Boolean;
+Function SelectID(Out ID:sInt; Const TableName, NameCol, SearchFor:AnsiString; Const fkID:sInt; Const fkCol:AnsiString):Boolean;
 Var
    Code : sInt;
    Stat : Psqlite3_stmt;
    SQL : AnsiString;
 begin
    ID := -1;
-   SQL := 'SELECT * FROM `' + TableName + '` WHERE `' + NameCol + '` = ?';
+   SQL := 'SELECT * FROM `' + TableName + '` WHERE (`' + NameCol + '` = ?)';
+   If(fkCol <> '') then SQL += ' AND (`' + fkCol + '` = ?)';
    
    If(sqlite3_prepare(Datab, PChar(SQL), -1, @Stat, NIL) <> SQLITE_OK) then begin
       Writeln(stderr, 'fpman: failed to prepare SELECT FROM `',TableName,'` statement: ',sqlite3_errmsg(Datab));
@@ -214,6 +215,13 @@ begin
    If(sqlite3_bind_text(Stat, 1, PChar(SearchFor), -1, NIL) <> SQLITE_OK) then begin
       Writeln(stderr, 'fpman: failed to bind argument for SELECT FROM `',TableName,'` statement: ',sqlite3_errmsg(Datab));
       Exit(False)
+   end;
+   
+   If(fkCol <> '') then begin
+      If(sqlite3_bind_int(Stat, 2, fkId) <> SQLITE_OK) then begin
+         Writeln(stderr, 'fpman: failed to bind argument for SELECT FROM `',TableName,'` statement: ',sqlite3_errmsg(Datab));
+         Exit(False)
+      end
    end;
    
    Code := sqlite3_step(Stat);
@@ -241,12 +249,12 @@ end;
 
 Function GetID(Out ID:sInt; Const TableName, NameCol, SearchFor:AnsiString; Const fkID:sInt = -1; Const fkCol:AnsiString = ''):Boolean;
 begin
-   If(Not (SelectID(ID, TableName, NameCol, SearchFor))) then Exit(False);
+   If(Not (SelectID(ID, TableName, NameCol, SearchFor, fkId, fkCol))) then Exit(False);
    If(ID <> -1) then Exit(True);
    
    If(Not (InsertID(TableName, NameCol, SearchFor, fkID, fkCol))) then Exit(False);
    
-   If(Not (SelectID(ID, TableName, NameCol, SearchFor))) then Exit(False);
+   If(Not (SelectID(ID, TableName, NameCol, SearchFor, fkId, fkCol))) then Exit(False);
    Exit(ID <> -1)
 end;
 
@@ -292,10 +300,9 @@ Var
    Row : TResultRow;
 begin
    SQL := 'SELECT `page_Id`, `pkg_Name`, `unit_Name`, `page_Name` FROM `view_pages` WHERE (';
-      If(Package_ <> '') then SQL += '`pkg_Name` LIKE ? AND ';
-      If(Unit_ <> '') then SQL += '`unit_Name` LIKE ? AND ';
-      SQL += '`page_Name` LIKE ?';
-   SQL += ')';
+      If(Package_ <> '') then SQL += '`pkg_Name` LIKE ? ESCAPE ''\'') AND (';
+      If(Unit_ <> '') then SQL += '`unit_Name` LIKE ? ESCAPE ''\'') AND (';
+   SQL += '`page_Name` LIKE ? ESCAPE ''\'')';
    
    If(sqlite3_prepare(Datab, PChar(SQL), -1, @Stat, NIL) <> SQLITE_OK) then begin
       Writeln(stderr, 'fpman: failed to prepare SELECT FROM `view_pages` statement: ',sqlite3_errmsg(Datab));
@@ -311,7 +318,7 @@ begin
          Exit(False)
    end end;
    
-   If(Package_ <> '') then begin
+   If(Unit_ <> '') then begin
       ArgIdx += 1;
       If(sqlite3_bind_text(Stat, ArgIdx, PChar(Unit_), -1, NIL) <> SQLITE_OK) then begin
          Writeln(stderr, 'fpman: failed to bind argument for SELECT FROM `view_pages` statement: ',sqlite3_errmsg(Datab));
@@ -367,9 +374,9 @@ begin
    If(Not SearchForPage('', '', PageName, rset)) then Exit(False);
    If(rset.Count > 0) then Exit(True);
    
-   // Look for dot. If not found, return
+   // Look for dot. If not found (or first char), return
    P := Pos('.', PageName);
-   If(P = 0) then Exit(True);
+   If(P <= 1) then Exit(True);
    
    // Extract unit from pagename
    Unit_ := LeftStr(PageName, P - 1);
@@ -379,9 +386,9 @@ begin
    If(Not SearchForPage('', Unit_, PageName, rset)) then Exit(False);
    If(rset.Count > 0) then Exit(True);
    
-   // Look for dot again, return if not found
+   // Look for dot again, return if not found or first char
    P := Pos('.', PageName);
-   If(P = 0) then Exit(True);
+   If(P < 1) then Exit(True);
    
    // Extract parts again
    Package_ := Unit_;
@@ -409,7 +416,7 @@ begin
    PageName := StringReplace(PageName, '%', '\%', [rfReplaceAll]);
    PageName := '%' + PageName + '%';
    
-   SQL := 'SELECT `page_Id`, `pkg_Name`, `unit_Name`, `page_Name` FROM `view_pages` WHERE (`fullName` LIKE ?)';
+   SQL := 'SELECT `page_Id`, `pkg_Name`, `unit_Name`, `page_Name` FROM `view_pages` WHERE (`fullName` LIKE ? ESCAPE ''\'')';
    
    If(sqlite3_prepare(Datab, PChar(SQL), -1, @Stat, NIL) <> SQLITE_OK) then begin
       Writeln(stderr, 'fpman: failed to prepare SELECT FROM `view_pages` statement: ',sqlite3_errmsg(Datab));
@@ -507,7 +514,7 @@ begin
          Exit(False)
       end;
       
-      SQL := 'UPDATE `sqlite_sequence` SET `seq` = 1 WHERE `name` = '''+TABLES[Idx]+'''';
+      SQL := 'UPDATE `sqlite_sequence` SET `seq` = 0 WHERE `name` = '''+TABLES[Idx]+'''';
       
       If(sqlite3_prepare(Datab, PChar(SQL), -1, @Stat, NIL) <> SQLITE_OK) then begin
          Writeln(stderr, 'fpman: failed to prepare UPDATE `sqlite_sequence` statement: ',sqlite3_errmsg(Datab));
