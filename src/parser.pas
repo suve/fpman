@@ -167,31 +167,19 @@ begin
       Delete(Text, Length(Text) - Length('.TP 0' + #10), Length('.TP 0' + #10))
 end;
 
-Procedure Declaration_Routine(Const DeclType:AnsiString; Var Func:TFunctionDesc; Var Source:AnsiString);
+Procedure Declaration_Params(Const DeclPfx:AnsiString; Var Func:TFunctionDesc; Var Source:AnsiString);
 Var
-   DeclName, Symb, ReturnType : AnsiString;
+   Symb, ReturnType: AnsiString;
    
    Params : Array[0..31] of AnsiString;
    ParamNum, Idx : sInt;
    
    PaQual, PaName, PaType : AnsiString;
 begin
-   DeleteUntil(Source, '<span class="sym">', @DeclName);
-   DeclName := Trim(DeclName);
+   ParamNum := 0;
    
    DeleteUntil(Source, '</span>', @Symb);
    Symb := Trim(Symb);
-   
-   ParamNum := 0;
-   
-   If(Symb = '.') then begin
-      DeleteUntil(Source, '<span class="sym">', @Symb);
-      
-      DeclName += '.' + Symb;
-      
-      DeleteUntil(Source, '</span>', @Symb);
-      Symb := Trim(Symb)
-   end;
    
    If(Symb = '(') then begin
       While(DeleteUntil(Source, '<span class="code">')) do begin
@@ -243,7 +231,7 @@ begin
    If(Symb <> ';') then Exit(); // fuck it
    If(Func.Declaration <> '') then Func.Declaration += #10#10;
    
-   Func.Declaration += DeclType + ' ' + '\fB' + HTML_to_troff(DeclName) + '\fR';
+   Func.Declaration += DeclPfx;
    
    If(ParamNum > 0) then begin
       Func.Declaration += '(';
@@ -257,6 +245,25 @@ begin
    
    If(ReturnType <> '') then Func.Declaration += ':' + HTML_to_troff(ReturnType);
    Func.Declaration += ';'
+end;
+
+
+Procedure Declaration_Routine(Const DeclType:AnsiString; Var Func:TFunctionDesc; Var Source:AnsiString);
+Var
+   DeclName, Fragment: AnsiString;
+begin
+   DeleteUntil(Source, '<span class="sym">', @Fragment);
+   DeclName := Trim(Fragment);
+   
+   If(LeftStr(Source, 1) = '.') then begin
+      DeleteUntil(Source, '</span>');
+      DeleteUntil(Source, '<span class="sym">', @Fragment);
+      
+      DeclName += '.' + Fragment
+   end;
+   
+   DeclName := DeclType + ' ' + '\fB' + HTML_to_troff(DeclName) + '\fR';
+   Declaration_Params(DeclName, Func, Source)
 end;
 
 Procedure Declaration_Method(Const Visibility:AnsiString; Var Func:TFunctionDesc; Var Source:AnsiString);
@@ -334,6 +341,15 @@ begin
       DeleteUntil(Source, '<span class="sym">;', @DeclType);
       Func.Declaration := '\fBtype\fR ' + DeclName + ' = \fBtype\fR ' + HTML_to_troff(DeclType) + ';';
       
+      Exit()
+   end;
+   
+   (* Check if type is a pointer to procedure/function.
+    * If yes, call Declaration_Routine to do the dirty work for us.
+    *)
+   If((DeclType = 'procedure') or (DeclType = 'function')) then begin
+      DeleteUntil(Source, '<span class="sym">');
+      Declaration_Params('type \fB' + DeclName + '\fR = '+DeclType, Func, Source);
       Exit()
    end;
    
