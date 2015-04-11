@@ -276,31 +276,102 @@ begin
    Declaration_Routine(Visibility + ' ' + DeclKw, Func, Source);
 end;
 
+Procedure Declaration_Enum(Const DeclName:AnsiString; Var Func:TFunctionDesc; Var Source:AnsiString);
+Type
+   TEnumMemberRow = record
+      Name, Comment: AnsiString;
+      Length: sInt;
+   end;
+   TEnumMemberList = specialize GenericDynArray<TEnumMemberRow>;
+Var
+   Fragment: AnsiString;
+   LastMember:Boolean;
+   
+   Idx, LongestMember: sInt;
+   MemberString: AnsiString;
+   MemberList: TEnumMemberList;
+   Member: TEnumMemberRow;
+begin
+   LongestMember := 0;
+   MemberList.Create(8);
+   
+   DeleteUntil(Source, '<span class="code">&nbsp;&nbsp;'); // skip to 1st member
+   LastMember := False;
+   
+   While(Not LastMember) do begin
+      DeleteUntil(Source, '<', @Fragment);
+      Member.Name := Trim(Fragment);
+      
+      // Intermediate members have '<span class="sym">,</span>' after name.
+      // Last member has no comma, it's followed by '</span>' from '<span class="code">'.
+      If(LeftStr(Source, 1) <> '/') then begin
+         // Jump to next member, keep intermediate content in Fragment
+         DeleteUntil(Source, '<span class="code">&nbsp;&nbsp;', @Fragment);
+      end else begin
+         // Jump to enum end (');')
+         DeleteUntil(Source, '<span class="sym">);', @Fragment);
+         LastMember := True
+      end;
+      
+      // Check Fragment for comment
+      If(DeleteUntil(Fragment, '<p class="cmt">')) then begin
+         DeleteUntil(Fragment, '</p>', @Member.Comment);
+         Member.Comment := HTML_to_troff(Member.Comment)
+      end else
+         Member.Comment := '';
+      
+      Member.Length := Length(Member.Name);
+      If(Not LastMember) then Member.Length += 1;
+      
+      If(Member.Length > LongestMember) then LongestMember := Member.Length;
+      MemberList.Push(Member)
+   end;
+   
+   If(Func.Declaration <> '') then Func.Declaration += #10#10;
+   Func.Declaration += '\fBtype\fR ' + DeclName + ' = \fB(\fR';
+   
+   For Idx := 0 to (MemberList.Count - 1) do begin
+      Member := MemberList[Idx];
+      
+      MemberString := #10#32#32 + Member.Name;
+      If(Idx <> (MemberList.Count - 1)) then MemberString += ',';
+      If(Member.Comment <> '') then MemberString += StringOfChar(' ', LongestMember - Member.Length) + ' // ' + Member.Comment;
+      
+      Func.Declaration += MemberString
+   end;
+   
+   Func.Declaration += #10 + '.br' + #10 + '\fB);\fR'
+end;
+
 Procedure Declaration_Type(Var Func:TFunctionDesc; Var Source:AnsiString);
 Type
-   TMemberRow = record
+   TTypeMemberRow = record
       Visibility, Prefix, Name, Type_, Suffix, RW, Comment : AnsiString;
       Length : sInt;
    end;
    
-   TMemberList = specialize GenericDynArray<TMemberRow>;
+   TTypeMemberList = specialize GenericDynArray<TTypeMemberRow>;
 Var
    DeclType, DeclName, Fragment, MemberString, Visibility : AnsiString;
    
-   Member : TMemberRow;
+   Member : TTypeMemberRow;
    Idx, LongestMember : sInt;
-   MemberList:TMemberList;
+   MemberList:TTypeMemberList;
    
    CommentPos, NextMemberPos: sInt;
 begin
+   // After name of type, '<span class="sym"> = </span>' always follows.
    DeleteUntil(Source, '<span class="sym">', @DeclName);
    DeclName := Trim(DeclName);
    
-   (* After name of type, '<span class="sym"> = </span>' always follows.
+   (* Complex types (records, objects, classes) will have
+    * <span class="kw">STRUCT_TYPE</span>' after that.
     * 
-    * Complex types (records, objects, classes) will have '<span class="kw">STRUCT_TYPE</span>' after that.
     * Pointers will have '<span class="sym">^</span>'.
-    * Type aliases will have neither, but the test will match the closing '<span class="sym">;</span>'.
+    * enums will have '<span class="sym">(</span>'.
+    * 
+    * Type aliases will have neither, but the test will match the closing
+    * '<span class="sym">;</span>'.
     * 
     * Checking span class is an easy way to distinguish between those.
     *)
@@ -314,8 +385,12 @@ begin
          DeleteUntil(Source, '<span class="sym">', @DeclType);
          
          Func.Declaration := '\fBtype\fR ' + DeclName + ' = \fB^\fR' + HTML_to_troff(DeclType) + ';'
+      end else
+      If(Source[1] = '(') then begin
+         // yay, enum! Parsing enums is a more complicated task,
+         // so instead of doing it here, let's call a function and exit.
+         Declaration_Enum(DeclName, Func, Source)
       end else begin
-         
          Func.Declaration := '\fBtype\fR ' + DeclName + ' = ' + HTML_to_troff(DeclType) + ';'
       end;
       
@@ -344,12 +419,15 @@ begin
       Exit()
    end;
    
-   (* Check if type is a pointer to procedure/function.
-    * If yes, call Declaration_Routine to do the dirty work for us.
+   (* Types can also be pointers to procedures/functions.
+    * These will have '<span class="kw">FUNCEDURE</kw>' after the name.
+    * 
+    * So, we check if DeclType is procedure/function.
+    * If yes, call Declaration_Params to do the dirty work for us, and exit.
     *)
    If((DeclType = 'procedure') or (DeclType = 'function')) then begin
       DeleteUntil(Source, '<span class="sym">');
-      Declaration_Params('type \fB' + DeclName + '\fR = '+DeclType, Func, Source);
+      Declaration_Params('\fBtype\fR ' + DeclName + ' = '+DeclType, Func, Source);
       Exit()
    end;
    
