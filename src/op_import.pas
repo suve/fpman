@@ -86,7 +86,7 @@ begin
    end;
    Close(TmpFile);
    
-   ParseFunctionHTML(InputStr, Desc);
+   ParseFunctionHTML(InputStr, Desc, FilePath);
    
    If(Trim(Desc.Name) = '') then begin
       Writeln(stderr, 'fpman: failed to parse ',FilePath);

@@ -6,7 +6,7 @@ unit parser;
 interface
    uses descriptions;
 
-Procedure ParseFunctionHTML(HTML:AnsiString;Out Func:TFunctionDesc);
+Procedure ParseFunctionHTML(HTML:AnsiString;Out Func:TFunctionDesc;Const FileName:AnsiString);
 
 
 implementation
@@ -710,7 +710,7 @@ begin
    Func.Name := LeftStr(Func.Name, P - 1)
 end;
 
-Procedure ParseFunctionHTML(HTML:AnsiString;Out Func:TFunctionDesc);
+Procedure ParseFunctionHTML(HTML:AnsiString;Out Func:TFunctionDesc;Const FileName:AnsiString);
 Var
    Section, Content : AnsiString;
    StillParsing : Boolean;
@@ -725,41 +725,57 @@ begin
       Func.Package_ := ''
    end;
    
-   DeleteUntil(HTML, '<h1>');
-   DeleteUntil(HTML, '</h1>', @Func.Name);
-   
-   // Import skips some files, so we check the skip conditions here
-   // This allows us to stop parsing early and save some time
-   If(Trim(Func.Name) = '') then Exit();
-   If(LowerCase(LeftStr(Func.Name, Length('operator '))) = 'operator ') then Exit();
-   
-   DeleteUntil(HTML, '<p>');
-   DeleteUntil(HTML, '</p>', @Func.Summary);
-   
-   // Skip the paragraph with links to [Methods (By Name)] et cetera
-   If((Func.Summary <> '') and (Func.Summary[1] = '[')) then begin
-      DeleteUntil(HTML, '<p>');
-      DeleteUntil(HTML, '</p>', @Func.Summary)
-   end;
-   
-   Func.Summary := HTML_to_troff(Func.Summary);
-   
-   StillParsing := DeleteUntil(HTML, '<h2>');
-   While(StillParsing) do begin
-      DeleteUntil(HTML, '</h2>', @Section);
+   (* All the routine / type / const / var pages contain the identifier
+    * inside a <h1> header. Informative pages do not have this header,
+    * instead having only an <h2> after the unit/package upper bar.
+    * 
+    * Thus, by detecting a failed <h1> search, we can identify an
+    * info page and parse it properly.
+    *)
+   If(DeleteUntil(HTML, '<h1>')) then begin
+      DeleteUntil(HTML, '</h1>', @Func.Name);
       
-      If(Not DeleteUntil(HTML, '<h2>', @Content)) then begin
-         DeleteUntil(HTML, '<hr>', @Content);
-         StillParsing := False
+      // Import skips some files, so we check the skip conditions here
+      // This allows us to stop parsing early and save some time
+      If(Trim(Func.Name) = '') then Exit();
+      If(LowerCase(LeftStr(Func.Name, Length('operator '))) = 'operator ') then Exit();
+      
+      DeleteUntil(HTML, '<p>');
+      DeleteUntil(HTML, '</p>', @Func.Summary);
+      
+      // Skip the paragraph with links to [Methods (By Name)] et cetera
+      If((Func.Summary <> '') and (Func.Summary[1] = '[')) then begin
+         DeleteUntil(HTML, '<p>');
+         DeleteUntil(HTML, '</p>', @Func.Summary)
       end;
       
-      Section := LowerCase(Section);
-      Case Section of
-         'declaration': Func.Declaration := Content;
-         'description': Func.Description := Content;
-         'errors': Func.Errors := Content;
-         'see also': Func.SeeAlso := Content
+      Func.Summary := HTML_to_troff(Func.Summary);
+      
+      StillParsing := DeleteUntil(HTML, '<h2>');
+      While(StillParsing) do begin
+         DeleteUntil(HTML, '</h2>', @Section);
+         
+         If(Not DeleteUntil(HTML, '<h2>', @Content)) then begin
+            DeleteUntil(HTML, '<hr>', @Content);
+            StillParsing := False
+         end;
+         
+         Section := LowerCase(Section);
+         Case Section of
+            'declaration': Func.Declaration := Content;
+            'description': Func.Description := Content;
+            'errors': Func.Errors := Content;
+            'see also': Func.SeeAlso := Content
+         end
       end
+   end else begin // Info pages
+      Func.Name := ExtractFileName(FileName);
+      Func.Name := LeftStr(Func.Name, Length(Func.Name) - Length(ExtractFileExt(Func.Name)));
+      
+      DeleteUntil(HTML, '<h2>');
+      DeleteUntil(HTML, '</h2>', @Func.Summary);
+      
+      DeleteUntil(HTML, '<hr>', @Func.Description)
    end;
    
    If(DeleteUntil(HTML, '<span class="footer">')) then begin
@@ -768,14 +784,14 @@ begin
    end else
       Func.GeneratedOn := '';
    
-   ParseLocation(Func);
-   ParseDeclaration(Func);
+   If((Func.Unit_ <> '') or (Func.Package_ <> '')) then ParseLocation(Func);
+   If(Func.Declaration <> '') then ParseDeclaration(Func);
    
-   ParseParagraphs(Func.Description);
-   ParseParagraphs(Func.Errors);
+   If(Func.Description <> '') then ParseParagraphs(Func.Description);
+   If(Func.Errors <> '' ) then ParseParagraphs(Func.Errors);
    
-   ParseName(Func);
-   ParseSeeAlso(Func)
+   If(Func.Name <> '') then ParseName(Func);
+   If(Func.SeeAlso <> '') then ParseSeeAlso(Func)
 end;
 
 end.
