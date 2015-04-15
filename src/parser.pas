@@ -37,7 +37,7 @@ begin
    If(Result = '') then Exit();
    
    Result := StringReplace(Result, '\', '\\', [rfReplaceAll]);
-      
+   
    Result := StringReplace(Result, '<var>',  '\fB', [rfReplaceAll]);
    Result := StringReplace(Result, '</var>', '\fR ', [rfReplaceAll]);
    
@@ -92,7 +92,9 @@ begin
          StartPos := EndPos + 1;
       
       EndPos := PosEx(' ', Result, StartPos)
-   end
+   end;
+   
+   Result := StringReplace(Result, '"', '\(dq', [rfReplaceAll]);
 end;
 
 Procedure ParseLocation(Var Func:TFunctionDesc);
@@ -107,6 +109,45 @@ begin
    
    P := Pos('<', Func.Package_);
    Delete(Func.Package_, P, Length(Func.Package_))
+end;
+
+Function ParseParagraphs_Table(Source:AnsiString):AnsiString;
+Const
+   ASCII_tab = #9;
+Var
+   TblHead, TblLayout, TblBody: AnsiString;
+   Row, Cell: AnsiString;
+begin
+   TblLayout := '';
+   TblHead := '';
+   TblBody := '';
+   
+   While(DeleteUntil(Source, '<th>')) do begin
+      DeleteUntil(Source, '</th>', @Cell);
+      
+      TblHead += HTML_to_troff(Cell, TRUE) + ASCII_tab;
+      TblLayout += 'ci | ';
+   end;
+   Delete(TblLayout, Length(TblLayout) - 1, 2);
+   
+   While(DeleteUntil(Source, '<tr>')) do begin
+      DeleteUntil(Source, '</tr>', @Row);
+      
+      TblLayout += #10;
+      If(TblBody <> '') then TblBody += #10 + '_' + #10;
+      
+      While(DeleteUntil(Row, '<td>')) do begin
+         DeleteUntil(Row, '</td>', @Cell);
+         
+         TblBody += HTML_to_troff(Cell, TRUE) + ASCII_tab;
+         TblLayout += 'l | ';
+      end;
+      
+      Delete(TblLayout, Length(TblLayout) - 1, 2)
+   end;
+   
+   TblLayout[Length(TblLayout)] := '.';
+   Result := '.TS' + #10 + TblLayout + #10 + TblHead + #10 + '=' + #10 + TblBody + #10 + '.TE' + #10
 end;
 
 Procedure ParseParagraphs(Var Text:AnsiString);
@@ -150,6 +191,12 @@ begin
             
             Text += '\fB' + IntToStr(ListIdx) + '.\fR ' + HTML_to_troff(Line) + #10#10
          end
+      end else
+      If(Copy(Source, 1, Length('<table border="0">')) = '<table border="0">') then begin
+         Delete(Source, 1, Length('<table border="0">'));
+         DeleteUntil(Source, '</table>', @Line);
+         
+         Text += ParseParagraphs_Table(Line)
       end else
       If(Copy(Source, 1, Length('<table class="remark"')) = '<table class="remark"') then begin
          DeleteUntil(Source, '<td>');
