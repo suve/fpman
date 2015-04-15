@@ -313,14 +313,59 @@ begin
    Declaration_Params(DeclName, Func, Source)
 end;
 
+Procedure Declaration_Property(Const Visibility:AnsiString; Var Func:TFunctionDesc; Var Source:AnsiString);
+Var
+   ClassName, PropertyName, PropType, PropRead, PropWrite: AnsiString;
+begin
+   // ClassName<sym>.</sym>
+   DeleteUntil(Source, '<span class="sym">', @ClassName);
+   DeleteUntil(Source, '</span>');
+   
+   // <sym>.</sym>PropertyName<sym>:</sym>
+   DeleteUntil(Source, '<span class="sym">', @PropertyName);
+   DeleteUntil(Source, '</span>');
+   
+   // <sym>:</sym>PropertyType<br>
+   DeleteUntil(Source, '<br>', @PropType);
+   
+   If(DeleteUntil(Source, '<span class="kw">read')) then begin
+      DeleteUntil(Source, '</span>');
+      DeleteUntil(Source, '<', @PropRead)
+   end else
+      PropRead := '';
+   
+   If(DeleteUntil(Source, '<span class="kw">write')) then begin
+      DeleteUntil(Source, '</span>');
+      DeleteUntil(Source, '<', @PropWrite)
+   end else
+      PropWrite := '';
+   
+   If(Func.Declaration <> '') then Func.Declaration += #10;
+   
+   Func.Declaration += 
+      Visibility + ' property ' + 
+      '\fB' + HTML_to_troff(ClassName) + '.' + HTML_to_troff(PropertyName) + 
+      '\fR: ' +HTML_to_troff(PropType);
+   
+   If(PropRead <> '') then Func.Declaration += #10#32#32 + '\fBread\fR ' + HTML_to_troff(PropRead);
+   If(PropWrite <> '') then Func.Declaration += #10#32#32 + '\fBwrite\fR ' + HTML_to_troff(PropWrite);
+   Func.Declaration += ';';
+   
+   If(Pos(Source, '<span class="kw">default</span>') > 0) then Func.Declaration += #10#32#32 + '\fBdefault;\fR'
+end;
+
 Procedure Declaration_Method(Const Visibility:AnsiString; Var Func:TFunctionDesc; Var Source:AnsiString);
 Var
    DeclKw : AnsiString;
 begin
    DeleteUntil(Source, '<span class="kw">');
    DeleteUntil(Source, '</span>', @DeclKw);
+   DeclKw := Trim(DeclKw);
    
-   Declaration_Routine(Visibility + ' ' + DeclKw, Func, Source);
+   If(DeclKw <> 'property') then
+      Declaration_Routine(Visibility + ' ' + DeclKw, Func, Source)
+   else
+      Declaration_Property(Visibility, Func, Source)
 end;
 
 Procedure Declaration_Enum(Const DeclName:AnsiString; Var Func:TFunctionDesc; Var Source:AnsiString);
