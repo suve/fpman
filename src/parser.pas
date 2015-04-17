@@ -147,7 +147,10 @@ begin
    end;
    
    TblLayout[Length(TblLayout)] := '.';
-   Result := '.TS' + #10 + TblLayout + #10 + TblHead + #10 + '=' + #10 + TblBody + #10 + '.TE' + #10
+   
+   Result := '.TS' + #10 + TblLayout + #10;
+   If(TblHead <> '') then Result += TblHead + #10 + '=' + #10;
+   Result +=  TblBody + #10 + '.TE' + #10#10
 end;
 
 Procedure ParseParagraphs(Var Text:AnsiString);
@@ -192,6 +195,16 @@ begin
             Text += '\fB' + IntToStr(ListIdx) + '.\fR ' + HTML_to_troff(Line) + #10#10
          end
       end else
+      If(Copy(Source, 1, Length('<ul>')) = '<ul>') then begin
+         Delete(Source, 1, Length('<ul>'));
+         DeleteUntil(Source, '</ul>', @dlist);
+         
+         Text += #10;
+         While(DeleteUntil(dlist, '<li>')) do begin
+            DeleteUntil(dlist, '</li>', @Line);
+            Text += '\fB\[bu]\fR ' + HTML_to_troff(Line) + #10#10
+         end
+      end else
       If(Copy(Source, 1, Length('<table border="0">')) = '<table border="0">') then begin
          Delete(Source, 1, Length('<table border="0">'));
          DeleteUntil(Source, '</table>', @Line);
@@ -201,8 +214,17 @@ begin
       If(Copy(Source, 1, Length('<table class="remark"')) = '<table class="remark"') then begin
          DeleteUntil(Source, '<td>');
          DeleteUntil(Source, '</td>', @Line);
+         Line := Trim(Line);
          
-         Text += '\fIRemark:\fR ' + HTML_to_troff(Line) + #10#10;
+         If(LeftStr(Line, 1) <> '<') then
+            Text += '\fIRemark:\fR ' + HTML_to_troff(Line) + #10#10
+         else begin
+            ParseParagraphs(Line);
+            Line := StringReplace(Line, '\fB1.\fR', '   \fB1.\fR', []);
+            Line := StringReplace(Line, (#10#10 + '\fB'), (#10#10#32#32#32 + '\fB'), [rfReplaceAll]);
+            Text += '\fIRemark:\fR' + #10#10 + Line + #10#10
+         end;
+         
          DeleteUntil(Source, '</table>')
       end else
          Source := '';
