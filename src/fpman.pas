@@ -7,6 +7,8 @@ uses
    db, options,
    op_import, op_purge, op_rebuild, op_revalidate, op_search;
 
+Var
+   dbWasCreated: Boolean;
 
 // fpman.main()
 begin
@@ -17,15 +19,17 @@ begin
    
    ParseArgs();
    
-   If(Not db.Init()) then begin
+   If(Not db.Init(@dbWasCreated)) then begin
       Writeln(stderr, 'fpman: failed to open/create fpman.sqlite');
       Halt(1)
    end;
-   If(Not db.CreateTables()) then begin
-      Writeln(stderr, 'fpman: failed to create tables');
-      db.Quit();
-      Halt(1)
-   end;
+   
+   If(dbWasCreated) then
+      If(Not db.CreateTables()) then begin
+         Writeln(stderr, 'fpman: failed to create tables');
+         db.Quit();
+         Halt(1)
+      end;
    
    Case(Mode) of
       MODE_PAGE: Operation_Search();

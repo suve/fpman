@@ -14,7 +14,7 @@ Type
    
    TResultSet = specialize GenericDynArray<TResultRow>;
 
-Function Init():Boolean;
+Function Init(Const WasCreated:PBoolean = NIL):Boolean;
 Function Quit():Boolean;
 
 Function CreateTables():Boolean;
@@ -38,12 +38,15 @@ Var
    Datab : Psqlite3;
    PkgDict, UnitDict: TIDDict;
 
-Function Init():Boolean;
+Function Init(Const WasCreated:PBoolean):Boolean;
 Var
-   DBpath : AnsiString;
+   DBpath: AnsiString;
+   FiEx: Boolean;
 begin
    DBpath := GetConfPath() + 'fpman.sqlite';
-   If(Not FileExists(DBpath)) then 
+   FiEx := Not FileExists(DBpath);
+   
+   If(FiEx) then 
       If(Not ForceDirectories(GetConfPath())) then begin
          Writeln(stderr, 'fpman: failed to create config directory');
          Exit(False)
@@ -54,6 +57,10 @@ begin
       Exit(False);
    end;
    
+   PkgDict.Create(-1, 4);
+   UnitDict.Create(-1, 16);
+   
+   If(WasCreated <> NIL) then WasCreated^ := FiEx;
    Exit(True)
 end;
 
@@ -72,19 +79,18 @@ end;
 
 Function CreateTables():Boolean;
 Const
-   CREATE_NUM = 5;
+   STATEMENT_NUM = 6;
    
-   CreateName : Array[1 .. CREATE_NUM] of AnsiString = (
-      'packages', 'units', 'pages',
-      'view_units', 'view_pages'
+   StmtName : Array[1 .. STATEMENT_NUM] of AnsiString = (
+      'PRAGMA',
+      'CREATE TABLE `packages`',  'CREATE TABLE `units`', 'CREATE TABLE `pages`',
+      'CREATE VIEW `view_units`', 'CREATE VIEW `view_pages`'
    );
    
-   CreateType : Array[1 .. CREATE_NUM] of AnsiString = (
-      'TABLE', 'TABLE', 'TABLE',
-      'VIEW', 'VIEW'
-   );
    
-   SQL : Array[1 .. CREATE_NUM] of AnsiString = (
+   SQL : Array[1 .. STATEMENT_NUM] of AnsiString = (
+      'PRAGMA page_size = 4096',
+      
       'CREATE TABLE IF NOT EXISTS `packages` ('+
          '`pkg_Id` INTEGER PRIMARY KEY ASC ON CONFLICT FAIL AUTOINCREMENT,'+
          '`pkg_Name` TEXT'+
@@ -97,7 +103,7 @@ Const
       ')',
    
       'CREATE TABLE IF NOT EXISTS `pages` ('+
-         '`page_Id` INTEGER PRIMARY KEY ASC ON CONFLICT FAIL AUTOINCREMENT,'+
+         '`page_Id` INTEGER PRIMARY KEY ASC ON CONFLICT FAIL,'+
          '`page_unitId` INTEGER REFERENCES `units` (`unit_Id`),'+
          '`page_Name` TEXT'+
       ')',
@@ -130,25 +136,22 @@ Var
    Idx : sInt;
    Stat : Psqlite3_stmt;
 begin
-   For Idx := 1 to CREATE_NUM do begin
+   For Idx := 1 to STATEMENT_NUM do begin
       If(sqlite3_prepare(Datab, PChar(SQL[Idx]), -1, @Stat, NIL) <> SQLITE_OK) then begin
-         Writeln(stderr, 'fpman: failed to prepare CREATE ',CreateType[Idx],' `', CreateName[Idx],'` statement: ',sqlite3_errmsg(Datab));
+         Writeln(stderr, 'fpman: failed to prepare ',StmtName[Idx],' statement: ',sqlite3_errmsg(Datab));
          Exit(False)
       end;
       
       If(sqlite3_step(Stat) <> SQLITE_DONE) then begin
-         Writeln(stderr, 'fpman: failed to execute CREATE ',CreateType[Idx],' `', CreateName[Idx],'` statement: ',sqlite3_errmsg(Datab));
+         Writeln(stderr, 'fpman: failed to execute ',StmtName[Idx],' statement: ',sqlite3_errmsg(Datab));
          Exit(False)
       end;
       
       If(sqlite3_finalize(Stat) <> SQLITE_OK) then begin
-         Writeln(stderr, 'fpman: failed to finalize CREATE ',CreateType[Idx],'`', CreateName[Idx],'` statement: ',sqlite3_errmsg(Datab));
+         Writeln(stderr, 'fpman: failed to finalize ',StmtName[Idx],' statement: ',sqlite3_errmsg(Datab));
          Exit(False)
       end;
    end;
-   
-   PkgDict.Create(-1, 4);
-   UnitDict.Create(-1, 16);
    
    Exit(True)
 end;
