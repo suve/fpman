@@ -17,6 +17,8 @@ Type
       
       Summary : AnsiString;
       Declaration : AnsiString;
+      Inheritance : AnsiString;
+      
       Description : AnsiString;
       Errors : AnsiString;
       SeeAlso : AnsiString;
@@ -39,6 +41,8 @@ begin
    
    Desc.Summary := '';
    Desc.Declaration := '';
+   Desc.Inheritance := '';
+   
    Desc.Description := '';
    Desc.Errors := '';
    Desc.SeeAlso := '';

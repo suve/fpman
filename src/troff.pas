@@ -43,6 +43,11 @@ begin
       Writeln(F, Desc.Declaration)
    end;
    
+   If(Desc.Inheritance <> '') then begin
+      Writeln(F, '.SH INHERITANCE');
+      Writeln(F, Desc.Inheritance);
+   end;
+   
    If(Desc.Description <> '') then begin
       Writeln(F, '.SH DESCRIPTION');
       Writeln(F, Desc.Description)

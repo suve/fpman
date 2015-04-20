@@ -12,6 +12,9 @@ Procedure ParseFunctionHTML(HTML:AnsiString;Out Func:TFunctionDesc;Const FileNam
 implementation
    uses SysUtils, StrUtils, dynarray, utils;
 
+Const
+   ASCII_tab = #9;
+
 Procedure TagToBold(Const OpenTag, CloseTag:AnsiString; Var Target:AnsiString);
 Var
    StartPos, EndPos : sInt;
@@ -112,8 +115,6 @@ begin
 end;
 
 Function ParseParagraphs_Table(Source:AnsiString):AnsiString;
-Const
-   ASCII_tab = #9;
 Var
    TblHead, TblLayout, TblBody: AnsiString;
    Row, Cell: AnsiString;
@@ -763,6 +764,62 @@ begin
    end
 end;
 
+Procedure ParseInheritance(Var Func:TFunctionDesc);
+Type
+   TInheritanceMember = record
+      Class_, Comment : AnsiString
+   end;
+   
+   TInheritanceList = specialize GenericDynArray<TInheritanceMember>;
+Var
+   Source, Fragment : AnsiString;
+   CmtPos, NxtMemb, Idx: sInt;
+   
+   Inher: TInheritanceList;
+   Member: TInheritanceMember;
+begin
+   Source := Func.Inheritance;
+   Func.Inheritance := '';
+   
+   Inher.Create(4);
+   While(DeleteUntil(Source, '<span class="code">')) do begin
+      DeleteUntil(Source, '</span>', @Fragment);
+      Member.Class_ := HTML_to_troff(Fragment);
+      
+      CmtPos := Pos('<p class="cmt">', Source);
+      NxtMemb := Pos('<span class="code">', Source);
+      
+      If((CmtPos > 0) and ((CmtPos < NxtMemb) OR (NxtMemb = 0))) then begin
+         Delete(Source, 1, CmtPos + Length('<p class="cmt">') - 1);
+         DeleteUntil(Source, '</p>', @Fragment);
+         
+         Member.Comment := HTML_to_troff(Fragment)
+      end else
+         Member.Comment := '';
+      
+      Inher.Push(Member)
+   end;
+   
+   Func.Inheritance := '.TS';
+   For Idx := 0 to (Inher.Count - 1) do Func.Inheritance += #10'l l';
+   Func.Inheritance += '.'#10;
+   
+   For Idx := 0 to (Inher.Count - 1) do begin
+      Member := Inher[Idx];
+      
+      Member.Class_ := StringReplace(Member.Class_, ' ', '', [rfReplaceAll]);
+      Member.Class_ := StringReplace(Member.Class_, ',', '\fR, \fB', [rfReplaceAll]);
+      
+      Func.Inheritance += 
+         '\fB' + Member.Class_ + '\fR' +
+         ASCII_tab + 
+         Member.Comment + 
+         #10
+   end;
+   
+   Func.Inheritance += '.TE'
+end;
+
 Procedure ParseSeeAlso(Var Func:TFunctionDesc);
 Var
    Source, Name, Desc : AnsiString;
@@ -877,6 +934,7 @@ begin
          Section := LowerCase(Section);
          Case Section of
             'declaration': Func.Declaration := Content;
+            'inheritance': Func.Inheritance := Content;
             'description': Func.Description := Content;
             'errors': Func.Errors := Content;
             'see also': Func.SeeAlso := Content
@@ -900,6 +958,7 @@ begin
    
    If((Func.Unit_ <> '') or (Func.Package_ <> '')) then ParseLocation(Func);
    If(Func.Declaration <> '') then ParseDeclaration(Func);
+   If(Func.Inheritance <> '') then ParseInheritance(Func);
    
    If(Func.Description <> '') then ParseParagraphs(Func.Description);
    If(Func.Errors <> '' ) then ParseParagraphs(Func.Errors);
