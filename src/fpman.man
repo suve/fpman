@@ -1,13 +1,13 @@
 ." manpage for fpman
 ." contact suve [at] svgames.pl to correct typos and errors
 
-.TH fpman 1 "2015-04-09" "1.0.0" "manpages for free pascal"
+.TH fpman 1 "2015-04-21" "1.1.0" "manpages for free pascal"
 
 .SH NAME
 \fBfpman\fR - manpages for Free Pascal
 
 .SH SYNOPSIS
-\fBfpman\fR [OPTION...] [PAGE]
+\fBfpman\fR OPTION | PAGE
 
 .SH DESCRIPTION
 \fBfpman\fR is a documentation tool providing manpages for Free Pascal

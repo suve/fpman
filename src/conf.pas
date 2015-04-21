@@ -7,7 +7,7 @@ interface
 
 Const
    VERSION_MAJOR = '1';
-   VERSION_MINOR = '0';
+   VERSION_MINOR = '1';
    VERSION_BUGFX = '0';
    
    VERSION_STRING = VERSION_MAJOR + '.' + VERSION_MINOR + '.' + VERSION_BUGFX;
