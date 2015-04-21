@@ -41,6 +41,6 @@ begin
    
    db.Quit();
    
-   Writeln('fpman: end of main() reached, should never happen');
+   Writeln(stderr, 'fpman: end of main() reached, should never happen');
    Halt(1)
 end.

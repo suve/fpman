@@ -21,12 +21,16 @@ implementation
    uses SysUtils;
 
 Const
-   HomeVar = 'HOME';             
+   HomeVar = 'HOME';
    ConfDir = '/.suve/fpman/';
+
+Var
+   ConfPath: AnsiString = '';
 
 Function GetConfPath():AnsiString;
 begin
-   Result := GetEnvironmentVariable(HomeVar) + ConfDir
+   If(ConfPath = '') then ConfPath := GetEnvironmentVariable(HomeVar) + ConfDir;
+   Result := ConfPath
 end;
 
 Function BuildNum():ShortString;
