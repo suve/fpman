@@ -368,10 +368,13 @@ Var
 begin
    rset.Purge();
    
-   // Escape wildcards
+   // Escape SQL wildcards
    PageName := StringReplace(PageName, '\', '\\', [rfReplaceAll]);
    PageName := StringReplace(PageName, '_', '\_', [rfReplaceAll]);
    PageName := StringReplace(PageName, '%', '\%', [rfReplaceAll]);
+   // Replace standard wildcards with SQL ones
+   PageName := StringReplace(PageName, '?', '_', [rfReplaceAll]);
+   PageName := StringReplace(PageName, '*', '%', [rfReplaceAll]);
    
    // Search for page using identifier
    If(Not SearchForPage('', '', PageName, rset)) then Exit(False);
@@ -413,10 +416,14 @@ Var
 begin
    rset.Purge();
    
-   // Escape wildcards
+   // Escape SQL wildcards
    PageName := StringReplace(PageName, '\', '\\', [rfReplaceAll]);
    PageName := StringReplace(PageName, '_', '\_', [rfReplaceAll]);
    PageName := StringReplace(PageName, '%', '\%', [rfReplaceAll]);
+   // Replace standard wildcards with SQL ones
+   PageName := StringReplace(PageName, '?', '_', [rfReplaceAll]);
+   PageName := StringReplace(PageName, '*', '%', [rfReplaceAll]);
+   // We're looking for similar pages, so anything containing the name counts, too
    PageName := '%' + PageName + '%';
    
    SQL := 'SELECT `page_Id`, `pkg_Name`, `unit_Name`, `page_Name` FROM `view_pages` WHERE (`fullName` LIKE ? ESCAPE ''\'')';

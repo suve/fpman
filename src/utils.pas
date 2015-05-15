@@ -4,9 +4,12 @@ unit utils;
 
 
 interface
+   uses db;
 
 Function DeleteUntil(Var Target:AnsiString; Const Limiter:AnsiString; Const StoreInto:PAnsiString = NIL):Boolean;
 Function TimeDiff(Const StartTime, EndTime:Comp):AnsiString;
+Function GetFileContents(Const FilePath:AnsiString; Out Content:AnsiString):Boolean;
+Procedure print_rset(Var rset:TResultSet);
 
 
 implementation
@@ -57,6 +60,40 @@ begin
    Delete(Target, 1, P + Length(Limiter) - 1);
    
    Exit(True)
+end;
+
+
+Function GetFileContents(Const FilePath:AnsiString; Out Content:AnsiString):Boolean;
+Var
+   Handle: Text;
+   Line: AnsiString;
+begin
+   Assign(Handle, FilePath);
+   {$I-} Reset(Handle); {$I+}
+   If(IOResult() <> 0) then Exit(False);
+   
+   Content := '';
+   While(Not eof(Handle)) do begin
+      Readln(Handle, Line);
+      Content += Line + #10
+   end;
+   
+   Close(Handle);
+   Exit(True)
+end;
+
+
+Procedure print_rset(Var rset:TResultSet);
+Var
+   Idx : sInt;
+begin
+   For Idx := 0 to (rset.Count - 1) do
+      Writeln(stderr,
+         'fpman: ',(Idx+1),': ',
+         rset[Idx].Package_, '.',
+         rset[Idx].Unit_, '.',
+         rset[Idx].Page
+      )
 end;
 
 end.

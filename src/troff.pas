@@ -92,7 +92,12 @@ begin
    If(Not DeleteUntil(Troff, #10, @Line)) then Exit(-1);
    
    Line := Trim(Line);
-   If(Not DeleteUntil(Line, ' - ', @Desc.Name)) then Desc.Name := Line;
+   If(DeleteUntil(Line, ' - ', @Desc.Name)) then begin
+      Desc.Summary := Line
+   end else begin
+      Desc.Name := Line;
+      Desc.Summary := ''
+   end;
    
    If(LeftStr(Desc.Name, Length('\fB')) = '\fB') then Delete(Desc.Name, 1, Length('\fB'));
    If(RightStr(Desc.Name, Length('\fR')) = '\fR') then Delete(Desc.Name, Length(Desc.Name) + 1 - Length('\fR'), Length('\fR'));

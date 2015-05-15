@@ -14,7 +14,7 @@ uses
    conf, options, descriptions, parser, db, troff, utils;
 
 Var
-   InputLine, InputStr : AnsiString;
+   InputStr : AnsiString;
    Desc : TFunctionDesc;
    
    CacheDir : AnsiString;
@@ -72,19 +72,10 @@ end;
 Function ImportFile_HTML(Const FilePath:AnsiString):sInt;
 begin
    InputStr := '';
-   Assign(TmpFile, FilePath);
-   
-   {$I-} Reset(TmpFile); {$I+}
-   If(IOResult() <> 0) then begin
+   If(Not GetFileContents(FilePath, InputStr)) then begin
       Writeln(stderr,'fpman: unable to read ',FilePath);
       Exit(-1)
    end;
-   
-   While(Not Eof(TmpFile)) do begin
-      Readln(TmpFile, InputLine);
-      InputStr += InputLine + #10
-   end;
-   Close(TmpFile);
    
    ParseFunctionHTML(InputStr, Desc, FilePath);
    
@@ -128,19 +119,10 @@ Var
    ParseResult: sInt;
 begin
    InputStr := '';
-   Assign(TmpFile, FilePath);
-   
-   {$I-} Reset(TmpFile); {$I+}
-   If(IOResult() <> 0) then begin
+   If(Not GetFileContents(FilePath, InputStr)) then begin
       Writeln(stderr,'fpman: unable to read ',FilePath);
       Exit(-1)
    end;
-   
-   While(Not Eof(TmpFile)) do begin
-      Readln(TmpFile, InputLine);
-      InputStr += InputLine + #10
-   end;
-   Close(TmpFile);
    
    ParseResult := ParseTroff(InputStr, Desc);
    

@@ -1,22 +1,23 @@
-unit op_search;
+unit op_list;
 
 {$INCLUDE defines.inc}
 
 interface
 
-Procedure Operation_Search();
+Procedure Operation_List();
 
 
 implementation
 
 uses
    SysUtils, Unix,
-   conf, options, db, utils;
+   conf, options, db, descriptions, troff, utils;
 
 
-Procedure Operation_Search();
+Procedure Operation_List();
 Var
-   TmpName : AnsiString;
+   TmpName, Content : AnsiString;
+   Desc: TFunctionDesc;
    DoQuit : Boolean;
    rset : TResultSet;
    Idx : sInt;
@@ -45,41 +46,33 @@ begin
       end;
       
       DoQuit := True
-   end else
-   If(rset.Count > 1) then begin
-      Writeln(stderr, 'fpman: multiple entries found for "', ModeArg, '":');
-      print_rset(rset);
-      
-      Writeln(stderr, 'fpman: which page do you want? (number, or 0 to exit)');
-      Read(TmpName);
-      
-      Idx := StrToIntDef(TmpName, 0) - 1;
-      If((Idx < 0) or (Idx > rset.Count)) then DoQuit := True
-   end else
-      Idx := 0; // Found exactly one page, set page index to 0
-   
-   // Page found in DB, check if file exists
-   If(Not DoQuit) then begin
-      TmpName := 'pages/' + 
-         LowerCase(rset[Idx].Package_) + '/' +
-         LowerCase(rset[Idx].Unit_) + '/' +
-         LowerCase(rset[Idx].Page) + '.man'
-      ;
-     
-      If(Not FileExists(GetConfPath() + TmpName)) then begin
-         Writeln(stderr, 'fpman: file ~/.suve/fpman/', TmpName, ' not found or is not readable');
-         Writeln(stderr, 'fpman: you may want to run fpman --revalidate');
-         DoQuit := True
-      end
    end;
    
    db.Quit();
    if(DoQuit) then Halt(1);
    
-   fpExecLP('man', [GetConfPath() + TmpName]);
+   For Idx := 0 to (rset.Count - 1) do begin
+      Writeln(stdout, rset[Idx].Package_ + '.' + rset[Idx].Unit_ + '.' + rset[Idx].Page);
+      
+      TmpName := 'pages/' + 
+         LowerCase(rset[Idx].Package_) + '/' +
+         LowerCase(rset[Idx].Unit_) + '/' +
+         LowerCase(rset[Idx].Page) + '.man'
+      ;
+      
+      If(Not GetFileContents(GetConfPath() + TmpName, Content)) then begin
+         Writeln(stderr, 'fpman: file ~/.suve/fpman/', TmpName, ' not found or is not readable');
+         Continue;
+      end;
+      
+      Case(ParseTroff(Content, Desc)) of
+         -1: Writeln(stderr, 'fpman: failed to parse manpage');
+          0: Writeln(stderr, 'fpman: file ~/.suve/fpman/', TmpName, ' does not seem to be an fpman page');
+         +1: Writeln(stdout, '  ', Desc.Summary);
+      end
+   end;
    
-   Writeln(stderr, 'fpman: failed to execute man');
-   Halt(1)
+   Halt()
 end;
 
 end.
