@@ -24,6 +24,9 @@ Function FindPage(PageName:AnsiString; Var rset:TResultSet):Boolean;
 Function FindSimilarPages(PageName:AnsiString; Var rset:TResultSet):Boolean;
 Function NumberOfPages(Out Number:sInt):Boolean;
 
+Function FindUnit(Const PackId:sInt; UnitName:AnsiString; Var rset:TResultSet):Boolean;
+Function FindPackage(PackName:AnsiString; Var rset:TResultSet):Boolean;
+
 Function PurgeTables():Boolean;
 Function DeletePages(Const ID : Array of sInt):Boolean;
 
@@ -463,6 +466,110 @@ begin
    
    Exit(True)
 end;
+
+
+
+Function FindPackage(PackName: AnsiString; Var rset:TResultSet):Boolean;
+Var
+   Code: sInt;
+   Stat: Psqlite3_stmt;
+   SQL: AnsiString;
+   Row: TResultRow;
+begin
+   rset.Purge();
+   
+   // Escape SQL wildcards
+   PackName := StringReplace(PackName, '\', '\\', [rfReplaceAll]);
+   PackName := StringReplace(PackName, '_', '\_', [rfReplaceAll]);
+   PackName := StringReplace(PackName, '%', '\%', [rfReplaceAll]);
+   
+   SQL := 'SELECT `pkg_Id`, `pkg_Name` FROM `packages` WHERE (`pkg_Name` LIKE ? ESCAPE ''\'')';
+   
+   If(sqlite3_prepare(Datab, PChar(SQL), -1, @Stat, NIL) <> SQLITE_OK) then begin
+      Writeln(stderr, 'fpman: failed to prepare SELECT FROM `packages` statement: ',sqlite3_errmsg(Datab));
+      Exit(False)
+   end;
+   
+   If(sqlite3_bind_text(Stat, 0, PChar(PackName), -1, NIL) <> SQLITE_OK) then begin
+      Writeln(stderr, 'fpman: failed to bind argument for SELECT FROM `packages` statement: ',sqlite3_errmsg(Datab));
+      Exit(False)
+   end;
+   
+   While(True) do begin
+      Code := sqlite3_step(Stat);
+      If(Not (Code in [SQLITE_DONE, SQLITE_ROW])) then begin
+         Writeln(stderr, 'fpman: failed to execute SELECT FROM `packages` statement: ',sqlite3_errmsg(Datab));
+         Exit(False)
+      end;
+      
+      If(Code = SQLITE_DONE) then Break;
+   
+      Row.ID := sqlite3_column_int(Stat, 0);
+      Row.Package_ := sqlite3_column_text(Stat, 1);
+      
+      rset.Push(Row)
+   end;
+   
+   If(sqlite3_finalize(Stat) <> SQLITE_OK) then begin
+      Writeln(stderr, 'fpman: failed to finalize SELECT FROM `packages` statement: ',sqlite3_errmsg(Datab));
+      Exit(False)
+   end;
+   
+   Exit(True)
+end;
+
+
+Function FindUnit(Const PackId:sInt; UnitName: AnsiString; Var rset:TResultSet):Boolean;
+Var
+   Code: sInt;
+   Stat: Psqlite3_stmt;
+   SQL: AnsiString;
+   Row: TResultRow;
+begin
+   rset.Purge();
+   
+   // Escape SQL wildcards
+   UnitName := StringReplace(UnitName, '\', '\\', [rfReplaceAll]);
+   UnitName := StringReplace(UnitName, '_', '\_', [rfReplaceAll]);
+   UnitName := StringReplace(UnitName, '%', '\%', [rfReplaceAll]);
+   
+   SQL := 'SELECT `unit_Id`, `unit_Name` FROM `units` WHERE ';
+   If(PackId >= 0) then SQL += '(`unit_pkgId` = '+IntToStr(PackId)+') AND ';
+   SQL += '(`unit_Name` LIKE ? ESCAPE ''\'')';
+   
+   If(sqlite3_prepare(Datab, PChar(SQL), -1, @Stat, NIL) <> SQLITE_OK) then begin
+      Writeln(stderr, 'fpman: failed to prepare SELECT FROM `units` statement: ',sqlite3_errmsg(Datab));
+      Exit(False)
+   end;
+   
+   If(sqlite3_bind_text(Stat, 0, PChar(UnitName), -1, NIL) <> SQLITE_OK) then begin
+      Writeln(stderr, 'fpman: failed to bind argument for SELECT FROM `units` statement: ',sqlite3_errmsg(Datab));
+      Exit(False)
+   end;
+   
+   While(True) do begin
+      Code := sqlite3_step(Stat);
+      If(Not (Code in [SQLITE_DONE, SQLITE_ROW])) then begin
+         Writeln(stderr, 'fpman: failed to execute SELECT FROM `units` statement: ',sqlite3_errmsg(Datab));
+         Exit(False)
+      end;
+      
+      If(Code = SQLITE_DONE) then Break;
+   
+      Row.ID := sqlite3_column_int(Stat, 0);
+      Row.Unit_ := sqlite3_column_text(Stat, 1);
+      
+      rset.Push(Row)
+   end;
+   
+   If(sqlite3_finalize(Stat) <> SQLITE_OK) then begin
+      Writeln(stderr, 'fpman: failed to finalize SELECT FROM `units` statement: ',sqlite3_errmsg(Datab));
+      Exit(False)
+   end;
+   
+   Exit(True)
+end;
+
 
 Function NumberOfPages(Out Number:sInt):Boolean;
 Const

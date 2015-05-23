@@ -8,11 +8,17 @@ interface
 
 Function DeleteUntil(Var Target:AnsiString; Const Limiter:AnsiString; Const StoreInto:PAnsiString = NIL):Boolean;
 Function TimeDiff(Const StartTime, EndTime:Comp):AnsiString;
+
 Function GetFileContents(Const FilePath:AnsiString; Out Content:AnsiString):Boolean;
+
+Function IdentifierIsValid(Const Ident: AnsiString):Boolean;
+Function ParseSection(Sect:AnsiString;Out Package_, Unit_:AnsiString):Boolean;
+
 Procedure print_rset(Var rset:TResultSet);
 
 
 implementation
+   uses SysUtils;
 
 
 Function TimeDiff(Const StartTime, EndTime:Comp):AnsiString;
@@ -79,6 +85,69 @@ begin
    end;
    
    Close(Handle);
+   Exit(True)
+end;
+
+
+Function IdentifierIsValid(Const Ident: AnsiString):Boolean;
+Var
+   P, L: sInt;
+begin
+   L := Length(Ident);
+   If(L = 0) then Exit(False);
+   
+   For P:=1 to L do begin
+      If Not ((Ident[P] in ['a'..'z']) or (Ident[P] in ['A'..'Z']) or (Ident[P] = '_')) then begin
+         If Not (Ident[P] in ['0'..'9']) then Exit(False);
+         If(P = 1) then Exit(False)
+      end
+   end;
+   
+   Exit(True)
+end;
+
+
+Function ParseSection(Sect:AnsiString;Out Package_, Unit_:AnsiString):Boolean;
+Var
+   P: sInt;
+   Fragment: AnsiString;
+begin
+   Sect := LowerCase(Trim(Sect));
+   If Not (DeleteUntil(Sect, ':', @Fragment)) then begin
+      Writeln(stderr, 'fpman: section must be either "package:" or "unit:"');
+      Exit(False)
+   end;
+   
+   If(Fragment = 'package') then begin
+      If Not (IdentifierIsValid(Sect)) then begin
+         Writeln(stderr, 'fpman: "'+Sect+'" is not a valid package name');
+         Exit(False)
+      end;
+      
+      Package_ := Sect;
+      Unit_ := ''
+   end else
+   If(Fragment = 'unit') then begin
+      P := Pos('.', Sect);
+      If(P > 0) then begin
+         Package_ := Copy(Sect, 1, P-1);
+         If Not (IdentifierIsValid(Package_)) then begin
+            Writeln(stderr, 'fpman: "'+Package_+'" is not a valid package name');
+            Exit(False)
+         end
+      end else
+         Package_ := '';
+      
+      Unit_ := Copy(Sect, P+1, Length(Sect));
+      If Not (IdentifierIsValid(Unit_)) then begin
+         Writeln('fpman: "'+Unit_+'" is not a valid unit name');
+         Exit(False)
+      end
+   end else begin
+      Writeln(stderr, 'fpman: section must be either "package:" or "unit:"');
+      Exit(False)
+   end;
+   
    Exit(True)
 end;
 
