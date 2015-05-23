@@ -47,17 +47,17 @@ begin
       '        Imports .html or .man documentation files from PATH to fpman library.' + #10 +
       '        PATH can specify either a single file to import, or a directory to'    + #10 +
       '        scan for .html/.man files. Subdirectories will be scanned recursively.'+ #10 +
-      ' --purge [SECTION]'                                                            + #10 +
+      ' --purge[=SECTION]'                                                            + #10 +
       '        Cleans fpman library directory and sqlite database. If SECTION is'     + #10 +
       '        specified, instead of the whole library, only the selected part will'  + #10 +
       '        be purged. SECTION must be in "type:name" format, where type must be'  + #10 +
       '        either "package" or "unit". Unit names can be prefixed with the'       + #10 +
       '        package name, followed by a dot, to avoid ambiguity.'                  + #10 +
-      ' --rebuild [SECTION]'                                                          + #10 +
+      ' --rebuild[=SECTION]'                                                          + #10 +
       '        Purges fpman sqlite database, and then rebuilds its contents based on' + #10 +
       '        files found in the library directory. SECTION can be used in the same' + #10 +
       '        manner as in the --purge option.'                                      + #10 +
-      ' --revalidate [SECTION]'                                                       + #10 +
+      ' --revalidate[=SECTION]'                                                       + #10 +
       '        Looks through all the entries present in sqlite database and checks if'+ #10 +
       '        their manpages are still in library. Any dead entries are removed from'+ #10 +
       '        the database. SECTION can be used in the same manner as in --purge or' + #10 +
@@ -99,9 +99,20 @@ begin
       If(opt = EndOfOptions) then Exit();
       
       Case(opt) of
-         'p': Mode := MODE_PURGE;
-         'r': Mode := MODE_REVALIDATE;
-         'R': Mode := MODE_REBUILD;
+         'p': begin
+            Mode := MODE_PURGE;
+            ModeArg := OptArg
+         end;
+         
+         'r': begin
+            Mode := MODE_REVALIDATE;
+            ModeArg := OptArg
+         end;
+         
+         'R': begin
+            Mode := MODE_REBUILD;
+            ModeArg := OptArg
+         end;
          
          'i': begin
             Mode := MODE_IMPORT;

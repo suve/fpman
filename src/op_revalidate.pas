@@ -11,7 +11,7 @@ implementation
 
 uses
    SysUtils,
-   conf, dynarray, db;
+   conf, dynarray, db, options, utils;
 
 
 Procedure Operation_Revalidate();
@@ -22,10 +22,21 @@ Var
    rset : TResultSet;
    Idx : sInt;
    
-   ConfDir, FileName : AnsiString;
+   PackName, UnitName: AnsiString;
+   ConfDir, FileName: AnsiString;
 begin
    rset.Create();
-   If(Not FindPage('', rset)) then begin
+   If(ModeArg = '') then begin
+      PackName := '';
+      UnitName := ''
+   end else begin
+      If(Not ParseSection(ModeArg, PackName, UnitName)) then begin
+         db.Quit();
+         Halt(1)
+      end
+   end;
+   
+   If(Not ListPages(PackName, UnitName, rset)) then begin
       Writeln(stderr, 'fpman: failed to fetch list of pages from database');
       Writeln(stderr, 'fpman: aborting revalidation');
       
@@ -44,7 +55,7 @@ begin
    end;
    
    If(IDlist.Count = 0) then begin
-      Writeln(stderr, 'fpman: revalidation complete, all pages present');
+      Writeln(stderr, 'fpman: revalidation complete, all ',rset.Count,' pages present');
       db.Quit();
       Halt(0)
    end;
