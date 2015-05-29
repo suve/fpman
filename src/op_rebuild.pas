@@ -100,41 +100,107 @@ begin
    FindClose(Search)
 end;
 
+
+Procedure RebuildAll_Purge();
+begin
+   If(db.PurgeTables()) then begin
+      Writeln(stderr, 'fpman: successfully purged sqlite database tables');
+      Exit()
+   end;
+   
+   Writeln(stderr, 'fpman: failed to purge sqlite database tables');
+   Writeln(stderr, 'fpman: fpman.sqlite will be removed');
+   
+   db.Quit();
+   If(Not DeleteFile(GetConfPath() + 'fpman.sqlite')) then begin
+      Writeln(stderr, 'fpman: failed to remove fpman.sqlite');
+      Writeln(stderr, 'fpman: aborting rebuild');
+      Halt(1)
+   end;
+   
+   If(Not db.Init()) then begin
+      Writeln(stderr, 'fpman: failed to create fpman.sqlite, aborting rebuild');
+      Halt(1)
+   end;
+   If(Not db.CreateTables()) then begin
+      Writeln(stderr, 'fpman: failed to create tables, aborting rebuild');
+      db.Quit();
+      Halt(1)
+   end
+end;
+
+Procedure RebuildAll_Import(Var SuccPages, SkipPages, FailPages: sInt);
+begin
+   ImportDirectory(GetConfPath() + 'pages/*', SuccPages, SkipPages, FailPages);
+end;
+
+
+Procedure RebuildSection_Purge(Const PackName, UnitName:AnsiString); 
+begin
+   If(db.DeletePages(PackName, UnitName)) then Exit();
+
+   Writeln(stderr, 'fpman: failed to delete database entries, aborting rebuild');
+   db.Quit();
+   Halt(1)
+end;
+
+Procedure RebuildSection_Import(
+   PackName, UnitName:AnsiString;
+   Var SuccPages, SkipPages, FailPages: sInt
+);
+Var
+   Idx: sInt;
+   PackList: PDirList;
+   PossibleDir: AnsiString;
+begin
+   PackName := LowerCase(PackName);
+   UnitName := LowerCase(UnitName);
+   
+   If(PackName <> '') then begin
+      PossibleDir := GetConfPath() + 'pages/' + PackName + '/';
+      If(UnitName <> '') then PossibleDir += UnitName + '/';
+      
+      ImportDirectory(PossibleDir + '*', SuccPages, SkipPages, FailPages)
+   end else begin
+      PackList := GetDirListing(GetConfPath() + 'pages/', DIRLIST_DIRECTORIES);
+      
+      For Idx := 0 to (PackList^.Count - 1) do begin
+         PossibleDir := GetConfPath() + 'pages/' + PackList^[Idx] + '/' + UnitName;
+         If(DirectoryExists(PossibleDir)) then
+            ImportDirectory(PossibleDir + '/*', SuccPages, SkipPages, FailPages)
+      end;
+      
+      Dispose(PackList, Destroy())
+   end
+end;
+
+
 Procedure Operation_Rebuild();
 Var
    SuccPages, SkipPages, FailPages: sInt;
    StartTime, EndTime: Comp;
+   PackName, UnitName: AnsiString;
 begin
    StartTime := TimeStampToMSecs(DateTimeToTimeStamp(Now()));
    
-   If(Not db.PurgeTables()) then begin
-      Writeln(stderr, 'fpman: failed to purge sqlite database tables');
-      Writeln(stderr, 'fpman: fpman.sqlite will be removed');
-      
-      db.Quit();
-      If(Not DeleteFile(GetConfPath() + 'fpman.sqlite')) then begin
-         Writeln(stderr, 'fpman: failed to remove fpman.sqlite');
-         Writeln(stderr, 'fpman: aborting rebuild');
-         Halt(1)
-      end;
-      
-      If(Not db.Init()) then begin
-         Writeln(stderr, 'fpman: failed to create fpman.sqlite, aborting rebuild');
-         Halt(1)
-      end;
-      If(Not db.CreateTables()) then begin
-         Writeln(stderr, 'fpman: failed to create tables, aborting rebuild');
+   If(ModeArg = '') then
+      RebuildAll_Purge()
+   else begin
+      If(Not ParseSection(ModeArg, PackName, UnitName)) then begin
          db.Quit();
          Halt(1)
       end;
-   end else
-      Writeln(stderr, 'fpman: successfully purged sqlite database tables');
+      
+      RebuildSection_Purge(PackName, UnitName)
+   end;
    
    SuccPages := 0;
    SkipPages := 0;
    FailPages := 0;
    
-   ImportDirectory(GetConfPath() + 'pages/*', SuccPages, SkipPages, FailPages);
+   If(ModeArg = '')
+      then RebuildAll_Import(SuccPages, SkipPages, FailPages)
+      else RebuildSection_Import(PackName, UnitName, SuccPages, SkipPages, FailPages);
    
    EndTime := TimeStampToMSecs(DateTimeToTimeStamp(Now()));
    

@@ -48,9 +48,10 @@ begin
    PackName := LowerCase(PackName);
    UnitName := LowerCase(UnitName);
    If(PackName <> '') then begin
-      If(UnitName <> '')
-         then DirList.Push(GetConfPath() + 'pages/' + PackName + '/' + UnitName + '/')
-         else DirList.Push(GetConfPath() + 'pages/' + PackName + '/')
+      PossibleDir := GetConfPath() + 'pages/' + PackName + '/';
+      If(UnitName <> '') then PossibleDir += UnitName + '/';
+      
+      DirList.Push(PossibleDir)
    end else begin
       PackList := GetDirListing(GetConfPath() + 'pages/', DIRLIST_DIRECTORIES);
       
