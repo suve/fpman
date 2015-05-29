@@ -4,12 +4,22 @@ unit utils;
 
 
 interface
-   uses db;
+   uses db, dynarray;
+
+Type
+   PDirList = ^TDirList;
+   TDirList = specialize GenericDynArray<AnsiString>;
+
+Const
+   DIRLIST_FILES = 1;
+   DIRLIST_DIRECTORIES = 2;
+   DIRLIST_ALL = (DIRLIST_FILES or DIRLIST_DIRECTORIES);
 
 Function DeleteUntil(Var Target:AnsiString; Const Limiter:AnsiString; Const StoreInto:PAnsiString = NIL):Boolean;
 Function TimeDiff(Const StartTime, EndTime:Comp):AnsiString;
 
 Function GetFileContents(Const FilePath:AnsiString; Out Content:AnsiString):Boolean;
+Function GetDirListing(DirPath:AnsiString;Const Flags:sInt = DIRLIST_ALL):PDirList;
 
 Function IdentifierIsValid(Const Ident: AnsiString):Boolean;
 Function ParseSection(Sect:AnsiString;Out Package_, Unit_:AnsiString):Boolean;
@@ -86,6 +96,33 @@ begin
    
    Close(Handle);
    Exit(True)
+end;
+
+
+Function GetDirListing(DirPath:AnsiString;Const Flags:sInt = DIRLIST_ALL):PDirList;
+Var
+   Srch: TSearchRec;
+begin
+   DirPath := ExtractFileDir(DirPath);
+   If(RightStr(DirPath, 1) <> '/') then DirPath += '/';
+   DirPath += '*';
+   
+   New(Result, Create());
+   
+   If(FindFirst(DirPath, (faReadOnly or faDirectory), Srch) = 0) then repeat
+      If((Srch.Name = '.') or (Srch.Name = '..')) then Continue;
+      
+      If((Srch.Attr and faDirectory) = faDirectory) then begin
+         If((Flags and DIRLIST_DIRECTORIES) = 0) then Continue
+      end else begin
+         If((Flags and DIRLIST_FILES) = 0) then Continue
+      end;
+      
+      Result^.Push(Srch.Name)
+   Until(FindNext(Srch) <> 0);
+   
+   FindClose(Srch);
+   Result^.Trim()
 end;
 
 

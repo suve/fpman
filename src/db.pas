@@ -2,6 +2,11 @@ unit db;
 
 {$INCLUDE defines.inc}
 
+{*
+ * DELETE FROM `pages` WHERE `page_Id` IN (
+ *   SELECT `page_Id` FROM `view_pages` WHERE `unit_Name` = 'dos'
+ * );
+ *}
 
 interface
    uses sqlite3, descriptions, dynarray;
@@ -25,6 +30,7 @@ Function FindSimilarPages(PageName:AnsiString; Var rset:TResultSet):Boolean;
 Function NumberOfPages(Out Number:sInt):Boolean;
 
 Function ListPages(PackName, UnitName:AnsiString; Var rset:TResultSet):Boolean;
+Function DeletePages(PackName, UnitName:AnsiString):Boolean;
 
 Function FindUnit(Const PackId:sInt; UnitName:AnsiString; Var rset:TResultSet):Boolean;
 Function FindPackage(PackName:AnsiString; Var rset:TResultSet):Boolean;
@@ -469,6 +475,7 @@ begin
    Exit(True)
 end;
 
+
 Function ListPages(PackName, UnitName:AnsiString; Var rset:TResultSet):Boolean;
 Var
    Code, ArgIdx: sInt;
@@ -549,6 +556,76 @@ begin
    
    Exit(True)
 end;
+
+Function DeletePages(PackName, UnitName:AnsiString):Boolean;
+Var
+   ArgIdx: sInt;
+   Stat: Psqlite3_stmt;
+   SQL: AnsiString;
+begin
+   SQL := 'DELETE FROM `pages` WHERE `page_Id` IN (';
+   SQL += 'SELECT `page_Id` FROM `view_pages`';
+   
+   If((PackName <> '') or (UnitName <> '')) then begin
+      SQL += ' WHERE ';
+      
+      If(PackName <> '') then begin
+         PackName := StringReplace(PackName, '\', '\\', [rfReplaceAll]);
+         PackName := StringReplace(PackName, '_', '\_', [rfReplaceAll]);
+         PackName := StringReplace(PackName, '%', '\%', [rfReplaceAll]);
+         
+         SQL += '(`pkg_Name` LIKE ? ESCAPE ''\'')';
+         If(UnitName <> '') then SQL += ' AND '
+      end;
+      
+      If(UnitName <> '') then begin
+         UnitName := StringReplace(UnitName, '\', '\\', [rfReplaceAll]);
+         UnitName := StringReplace(UnitName, '_', '\_', [rfReplaceAll]);
+         UnitName := StringReplace(UnitName, '%', '\%', [rfReplaceAll]);
+         
+         SQL += '(`unit_Name` LIKE ? ESCAPE ''\'')'
+      end;
+   end;
+   SQL += ');';
+   
+   If(sqlite3_prepare(Datab, PChar(SQL), -1, @Stat, NIL) <> SQLITE_OK) then begin
+      Writeln(stderr, 'fpman: failed to prepare DELETE FROM `pages` statement: ',sqlite3_errmsg(Datab));
+      Exit(False)
+   end;
+   
+   If((PackName <> '') or (UnitName <> '')) then begin
+      ArgIdx := 0;
+      
+      If(PackName <> '') then begin
+         ArgIdx += 1;
+         If(sqlite3_bind_text(Stat, ArgIdx, PChar(PackName), -1, NIL) <> SQLITE_OK) then begin
+            Writeln(stderr, 'fpman: failed to bind argument for DELETE FROM `pages` statement: ',sqlite3_errmsg(Datab));
+            Exit(False)
+         end
+      end;
+      
+      If(UnitName <> '') then begin
+         ArgIdx += 1;
+         If(sqlite3_bind_text(Stat, ArgIdx, PChar(UnitName), -1, NIL) <> SQLITE_OK) then begin
+            Writeln(stderr, 'fpman: failed to bind argument for DELETE FROM `pages` statement: ',sqlite3_errmsg(Datab));
+            Exit(False)
+         end
+      end
+   end;
+   
+   If(sqlite3_step(Stat) <> SQLITE_DONE) then begin
+      Writeln(stderr, 'fpman: failed to execute ',SQL,' statement: ',sqlite3_errmsg(Datab));
+      Exit(False)
+   end;
+
+   If(sqlite3_finalize(Stat) <> SQLITE_OK) then begin
+      Writeln(stderr, 'fpman: failed to finalize ',SQL,' statement: ',sqlite3_errmsg(Datab));
+      Exit(False)
+   end;
+   
+   Exit(True)
+end;
+
 
 
 Function FindPackage(PackName: AnsiString; Var rset:TResultSet):Boolean;
