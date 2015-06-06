@@ -16,6 +16,8 @@ Const
    DIRLIST_ALL = (DIRLIST_FILES or DIRLIST_DIRECTORIES);
 
 Function DeleteUntil(Var Target:AnsiString; Const Limiter:AnsiString; Const StoreInto:PAnsiString = NIL):Boolean;
+Function RightDeleteUntil(Var Target:AnsiString; Const Limiter:AnsiString; Const StoreInto:PAnsiString = NIL):Boolean;
+
 Function TimeDiff(Const StartTime, EndTime:Comp):AnsiString;
 
 Function GetFileContents(Const FilePath:AnsiString; Out Content:AnsiString):Boolean;
@@ -28,7 +30,7 @@ Procedure print_rset(Var rset:TResultSet);
 
 
 implementation
-   uses SysUtils;
+   uses SysUtils, StrUtils;
 
 
 Function TimeDiff(Const StartTime, EndTime:Comp):AnsiString;
@@ -60,7 +62,6 @@ begin
    WriteStr(Result, (Diff div (24*60*60*1000)), 'd ', ((Diff div (60*60*1000)) mod 24), 'h');
 end;
 
-
 Function DeleteUntil(Var Target:AnsiString; Const Limiter:AnsiString; Const StoreInto:PAnsiString = NIL):Boolean;
 Var
    P:sInt;
@@ -78,6 +79,23 @@ begin
    Exit(True)
 end;
 
+Function RightDeleteUntil(Var Target:AnsiString; Const Limiter:AnsiString; Const StoreInto:PAnsiString = NIL):Boolean;
+Var
+   P, L: sInt;
+begin
+   P := RPos(Limiter, Target);
+   If(P <= 0) then Exit(False);
+   
+   L := Length(Target);
+   If(StoreInto <> NIL) then begin
+      If(P < L)
+         then StoreInto^ := Copy(Target, P + Length(Limiter), L)
+         else StoreInto^ := ''
+   end;
+   Delete(Target, P, L);
+   
+   Exit(True)
+end;
 
 Function GetFileContents(Const FilePath:AnsiString; Out Content:AnsiString):Boolean;
 Var

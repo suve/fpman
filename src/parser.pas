@@ -666,57 +666,126 @@ begin
    Func.Declaration += #10'.br'#10'\fBend\fR;'
 end; 
 
+// E_NOTIMPL
+// AllowDriveSeparators
+// DefaultStackSize
+// InitProc
+
 Procedure Declaration_Var(Const DeclPref:AnsiString; Var Func:TFunctionDesc; Var Source:AnsiString);
 Var
-   DeclName, DeclType, DeclVal : AnsiString;
-   IsPtr : Boolean;
+   DeclName, DeclType, DeclVal, Fragment : AnsiString;
+   ParenStack: AnsiString;
+   Indent: sInt;
 begin
    DeleteUntil(Source, '<span class="sym">', @DeclName);
    DeclName := Trim(DeclName);
    
+   // Check if type definition (varname :typename is present)
    If(Source[1] = ':') then begin
       DeleteUntil(Source, '</span>');
       DeleteUntil(Source, '<span class="sym">', @DeclType);
-      DeclType := HTML_to_troff(DeclType)
+      DeclType := HTML_to_troff(DeclType);
+      
+      // Further check if type is an array
+      If(Source[1] = '[') then begin
+         DeleteUntil(Source, '</span>');                        // remove symbol
+         DeleteUntil(Source, '<span class="sym">]', @DeclType); // get array type
+         
+         // Check for the double dot symbol. If present, divide array type into range start and range end.
+         // Otherwise, just slap the type name between the brackets.
+         If(DeleteUntil(DeclType, '<span class="sym">.</span><span class="sym">.</span>', @DeclVal)) then
+            DeclType := HTML_to_troff(DeclVal) + ' .. ' + HTML_to_troff(DeclType)
+         else
+            DeclType := HTML_to_troff(DeclType);
+         
+         DeleteUntil(Source, '<span class="kw">of</span>');
+         DeleteUntil(Source, '<span class="sym">', @DeclVal);
+         
+         DeclType := '\fBarray[\fR' + DeclType + '\fB] of \fR' + HTML_to_troff(DeclVal)
+      end
    end else
       DeclType := '';
    
-   If(Source[1] = '[') then begin
-      DeleteUntil(Source, '</span>');
-      DeleteUntil(Source, '<span class="sym">]', @DeclType);
-      
-      DeleteUntil(DeclType, '<span class="sym">.</span><span class="sym">.</span>', @DeclVal);
-      DeclType := HTML_to_troff(DeclVal) + ' .. ' + HTML_to_troff(DeclType);
-      
-      DeleteUntil(Source, '<span class="kw">of</span>');
-      DeleteUntil(Source, '<span class="sym">', @DeclVal);
-      
-      DeclType := '\fBarray[\fR' + DeclType + '\fB] of \fR' + HTML_to_troff(DeclVal)
-   end;
-   
+   DeclVal := '';
+   // Check for '='. If present, means a const value / default var value follows
    If(Source[1] = '=') then begin
-      DeleteUntil(Source, '</span>');
-      DeleteUntil(Source, '<span class="sym">', @DeclVal);
-      DeclVal := HTML_to_troff(DeclVal);
       
-      If(DeclVal = '') then begin
-         IsPtr := (Source[1] = '@');
-         DeleteUntil(Source, '</span>');
+      Indent := 0;
+      ParenStack := '';
+      DeleteUntil(Source, '</span>');
+      
+      // Just in case so we don't drop into an endless loop
+      While(Source <> '') do begin
+      
+         // Get text content up until the next symbol and append to value
+         If(Not DeleteUntil(Source, '<span class="sym">', @Fragment)) then Break;
+         Fragment := HTML_to_troff(Fragment);
          
-         DeleteUntil(Source, '<span class="sym">', @DeclVal);
-         DeclVal := HTML_to_troff(DeclVal);
+         // If text is not empty, append to value. If it defines a string, mark it appropriately
+         If(Fragment <> '') then begin
+            If(Fragment[1] = '''') then
+               DeclVal += '''\fI' + Copy(Fragment, 2, Length(Fragment) - 2) + '\fR'''
+            else If(Fragment[1] = '#') then
+               DeclVal += '\fI' + Fragment + '\fR'
+            else
+               DeclVal += Fragment
+         end;
          
-         If(IsPtr) then DeclVal := '\fB@\fR' + DeclVal
-      end else
-      If(DeclVal[1] = '''') then begin
-         DeclVal := '''\fI' + Copy(DeclVal, 2, Length(DeclVal) - 2) + '\fR'''
+         // Get the next symbol
+         DeleteUntil(Source, '</span>', @Fragment);
+         Fragment := Trim(Fragment);
+         
+         // If symbol is ';' and the parenthesis/bracket stack is empty, means we reached end of valuedef
+         If((Fragment = ';') AND (ParenStack = '')) then Break;
+         
+         Case Fragment of
+            '(', '[': begin
+               If(DeclVal = '') then begin
+                  DeclVal += '\fB' + Fragment + '\fR' + #10 + '  ';
+                  Indent := 2
+               end else
+                  DeclVal += '\fB' + Fragment + '\fR';
+                  
+               ParenStack += Fragment
+            end;
+         
+            ')': begin
+               RightDeleteUntil(ParenStack, '(');
+               DeclVal += '\fB' + Fragment + '\fR'
+            end;
+            
+            ']': begin
+               DeclVal += '\fB' + Fragment + '\fR';
+               RightDeleteUntil(ParenStack, '[')
+            end;
+            
+            ';':
+               DeclVal += '\fB;\fR' + #10 + '.br' + #10 + StringOfChar(' ', Indent);
+            
+            // Math symbols get extra spaces around them
+            '+', '-', '*', '/', '>', '<', '>=', '<=', '=', '<>', '><':
+               DeclVal += ' \fB' + Fragment + '\fR ';
+            
+            // ':' and ',' get space after them
+            ':', ',':
+               DeclVal += '\fB' + Fragment + '\fR ';
+            
+            // Other symbols don't get spaces
+            otherwise
+               DeclVal += '\fB' + Fragment + '\fR'
+         end
+      end;
+      
+      // If indent was present, we need to grab the closing bracket / paren and shove it to a separate line
+      If(Indent > 0) then begin
+         RightDeleteUntil(DeclVal, '\fB', @Fragment);
+         DeclVal += #10 + '.br' + #10 + '\fB' + Fragment
       end
-   end else
-      DeclVal := '';
+   end;
    
    Func.Declaration += '\fB' + DeclPref + '\fR ' + DeclName;
    If(DeclType <> '') then Func.Declaration += ': \fB' + DeclType + '\fR';
-   If(DeclVal <> '') then Func.Declaration += ' = ' + DeclVal;
+   If(DeclVal <> '') then Func.Declaration += ' = ' + Trim(DeclVal);
    Func.Declaration += ';'#10
 end;
 
@@ -873,12 +942,14 @@ Var
    P : sInt;
 begin
    P := Pos(' (', Func.Name);
-   If(P = 0) then Exit();
+   If(P > 0) then begin
+      Func.Classifiers := Copy(Func.Name, P + 2, Length(Func.Name));
+      Delete(Func.Classifiers, Length(Func.Classifiers), 1);
+      
+      Func.Name := LeftStr(Func.Name, P - 1)
+   end;
    
-   Func.Classifiers := Copy(Func.Name, P + 2, Length(Func.Name));
-   Delete(Func.Classifiers, Length(Func.Classifiers), 1);
-   
-   Func.Name := LeftStr(Func.Name, P - 1)
+   Func.Name := HTML_to_troff(Func.Name)
 end;
 
 Procedure ParseFunctionHTML(HTML:AnsiString;Out Func:TFunctionDesc;Const FileName:AnsiString);
