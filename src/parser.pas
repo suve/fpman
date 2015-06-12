@@ -666,16 +666,94 @@ begin
    Func.Declaration += #10'.br'#10'\fBend\fR;'
 end; 
 
-// E_NOTIMPL
-// AllowDriveSeparators
-// DefaultStackSize
-// InitProc
+
+Function __declvar__Nesting(Var Source:AnsiString; Const Indent:sInt):AnsiString;
+Const
+   INDENT_DEPTH = 2;
+Var
+   Fragment: AnsiString;
+   SplitElements: Boolean;
+begin
+   Result := '';
+   SplitElements := False;
+   
+   // Just in case so we don't drop into an endless loop
+   While(Source <> '') do begin
+   
+      // Get text content up until the next symbol and append to value
+      If(Not DeleteUntil(Source, '<span class="sym">', @Fragment)) then Break;
+      Fragment := HTML_to_troff(Fragment);
+      
+      // If text is not empty, append to value. If it defines a string, mark it appropriately
+      If(Fragment <> '') then begin
+         If(Fragment[1] = '''') then
+            Result += '''\fI' + Copy(Fragment, 2, Length(Fragment) - 2) + '\fR'''
+         else If(Fragment[1] = '#') then
+            Result += '\fI' + Fragment + '\fR'
+         else
+            Result += Fragment
+      end;
+      
+      // Get the next symbol
+      DeleteUntil(Source, '</span>', @Fragment);
+      Fragment := Trim(Fragment);
+      If(Fragment = '') then Continue;
+      
+      // If symbol is ';' and the stack is empty, means we reached end of valuedef
+      If((Fragment = ';') AND (Indent <= 0)) then Exit();
+      
+      Case Fragment of
+         '(', '[': 
+            Result += '\fB' + Fragment + '\fR' + __declvar__Nesting(Source, Indent + INDENT_DEPTH);
+      
+         ')', ']': begin
+            If(SplitElements) then begin
+               Result := TrimRight(Result);
+               Result += #10 + '.br' + #10 + StringOfChar(' ', Indent - INDENT_DEPTH)
+            end;
+            
+            Result += '\fB' + Fragment + '\fR';
+            Exit()
+         end;
+         
+         ';': begin
+            If(Indent > 0)
+               then Result += '\fB;\fR' + #10 + StringOfChar(' ', Indent)
+               else Result += '\fB;\fR' + #10 + '.br' + #10
+         end;
+         
+         ':', ',': begin
+            If(Not SplitElements) then begin
+               Result := #10 + StringOfChar(' ', Indent) + Result;
+               SplitElements := True
+            end;
+            
+            Result += '\fB' + Fragment + '\fR ';
+         end;
+         
+         // Math symbols get extra spaces around them
+         '+', '-', '*', '/', '>', '<', '>=', '<=', '=', '<>', '><':
+            Result += ' \fB' + Fragment + '\fR ';
+         
+         // Other symbols don't get spaces
+         otherwise
+            Result += '\fB' + Fragment + '\fR'
+      end
+   end
+end;
+
+Function __declvar__ParseValue(Var Source:AnsiString):AnsiString;
+begin
+   // Check for '='. If not present, means a const value / default var value does not follow
+   If(Length(Source) = 0) or (Source[1] <> '=') then Exit('');
+   
+   DeleteUntil(Source, '</span>');
+   Result := __declvar__Nesting(Source, 0)
+end;
 
 Procedure Declaration_Var(Const DeclPref:AnsiString; Var Func:TFunctionDesc; Var Source:AnsiString);
 Var
-   DeclName, DeclType, DeclVal, Fragment : AnsiString;
-   ParenStack: AnsiString;
-   Indent: sInt;
+   DeclName, DeclType, DeclVal: AnsiString;
 begin
    DeleteUntil(Source, '<span class="sym">', @DeclName);
    DeclName := Trim(DeclName);
@@ -706,82 +784,7 @@ begin
    end else
       DeclType := '';
    
-   DeclVal := '';
-   // Check for '='. If present, means a const value / default var value follows
-   If(Source[1] = '=') then begin
-      
-      Indent := 0;
-      ParenStack := '';
-      DeleteUntil(Source, '</span>');
-      
-      // Just in case so we don't drop into an endless loop
-      While(Source <> '') do begin
-      
-         // Get text content up until the next symbol and append to value
-         If(Not DeleteUntil(Source, '<span class="sym">', @Fragment)) then Break;
-         Fragment := HTML_to_troff(Fragment);
-         
-         // If text is not empty, append to value. If it defines a string, mark it appropriately
-         If(Fragment <> '') then begin
-            If(Fragment[1] = '''') then
-               DeclVal += '''\fI' + Copy(Fragment, 2, Length(Fragment) - 2) + '\fR'''
-            else If(Fragment[1] = '#') then
-               DeclVal += '\fI' + Fragment + '\fR'
-            else
-               DeclVal += Fragment
-         end;
-         
-         // Get the next symbol
-         DeleteUntil(Source, '</span>', @Fragment);
-         Fragment := Trim(Fragment);
-         
-         // If symbol is ';' and the parenthesis/bracket stack is empty, means we reached end of valuedef
-         If((Fragment = ';') AND (ParenStack = '')) then Break;
-         
-         Case Fragment of
-            '(', '[': begin
-               If(DeclVal = '') then begin
-                  DeclVal += '\fB' + Fragment + '\fR' + #10 + '  ';
-                  Indent := 2
-               end else
-                  DeclVal += '\fB' + Fragment + '\fR';
-                  
-               ParenStack += Fragment
-            end;
-         
-            ')': begin
-               RightDeleteUntil(ParenStack, '(');
-               DeclVal += '\fB' + Fragment + '\fR'
-            end;
-            
-            ']': begin
-               DeclVal += '\fB' + Fragment + '\fR';
-               RightDeleteUntil(ParenStack, '[')
-            end;
-            
-            ';':
-               DeclVal += '\fB;\fR' + #10 + '.br' + #10 + StringOfChar(' ', Indent);
-            
-            // Math symbols get extra spaces around them
-            '+', '-', '*', '/', '>', '<', '>=', '<=', '=', '<>', '><':
-               DeclVal += ' \fB' + Fragment + '\fR ';
-            
-            // ':' and ',' get space after them
-            ':', ',':
-               DeclVal += '\fB' + Fragment + '\fR ';
-            
-            // Other symbols don't get spaces
-            otherwise
-               DeclVal += '\fB' + Fragment + '\fR'
-         end
-      end;
-      
-      // If indent was present, we need to grab the closing bracket / paren and shove it to a separate line
-      If(Indent > 0) then begin
-         RightDeleteUntil(DeclVal, '\fB', @Fragment);
-         DeclVal += #10 + '.br' + #10 + '\fB' + Fragment
-      end
-   end;
+   DeclVal := __declvar__ParseValue(Source);
    
    Func.Declaration += '\fB' + DeclPref + '\fR ' + DeclName;
    If(DeclType <> '') then Func.Declaration += ': \fB' + DeclType + '\fR';
