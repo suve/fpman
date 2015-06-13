@@ -377,20 +377,6 @@ begin
    If(Pos(Source, '<span class="kw">default</span>') > 0) then Func.Declaration += #10#32#32 + '\fBdefault;\fR'
 end;
 
-Procedure Declaration_Method(Const Visibility:AnsiString; Var Func:TFunctionDesc; Var Source:AnsiString);
-Var
-   DeclKw : AnsiString;
-begin
-   DeleteUntil(Source, '<span class="kw">');
-   DeleteUntil(Source, '</span>', @DeclKw);
-   DeclKw := Trim(DeclKw);
-   
-   If(DeclKw <> 'property') then
-      Declaration_Routine(Visibility + ' ' + DeclKw, Func, Source)
-   else
-      Declaration_Property(Visibility, Func, Source)
-end;
-
 Procedure Declaration_Enum(Const DeclName:AnsiString; Var Func:TFunctionDesc; Var Source:AnsiString);
 Type
    TEnumMemberRow = record
@@ -756,10 +742,18 @@ Var
    DeclName, DeclType, DeclVal: AnsiString;
 begin
    DeleteUntil(Source, '<span class="sym">', @DeclName);
-   DeclName := Trim(DeclName);
+   DeclName := HTML_to_troff(DeclName);
+   
+   // Check if member of another type
+   While(Source[1] = '.') do begin
+      DeleteUntil(Source, '</span>');
+      DeleteUntil(Source, '<span class="sym">', @DeclType);
+      DeclName += '.' + HTML_to_troff(DeclType)
+   end;
    
    // Check if type definition (varname :typename is present)
-   If(Source[1] = ':') then begin
+   DeclType := LeftStr(Source, 3);
+   If((DeclType = ':</') or (DeclType = ' : ')) then begin
       DeleteUntil(Source, '</span>');
       DeleteUntil(Source, '<span class="sym">', @DeclType);
       DeclType := HTML_to_troff(DeclType);
@@ -792,6 +786,37 @@ begin
    Func.Declaration += ';'#10
 end;
 
+Procedure Declaration_Member(Const Visibility:AnsiString; Var Func:TFunctionDesc; Var Source:AnsiString);
+Var
+   DeclKw : AnsiString;
+begin
+   Source := TrimLeft(Source);
+   
+   If(LeftStr(Source, 17) <> '<span class="kw">') then begin
+      Declaration_Var(Visibility, Func, Source);
+      Exit()
+   end;
+   
+   DeleteUntil(Source, '<span class="kw">');
+   DeleteUntil(Source, '</span>', @DeclKw);
+   DeclKw := Trim(DeclKw);
+   
+   Case(DeclKw) of
+      'constructor', 'destructor',
+      'procedure', 'class procedure',
+      'function', 'class function':
+         Declaration_Routine(Visibility + ' ' + DeclKw, Func, Source);
+      
+      'property':
+         Declaration_Property(Visibility, Func, Source);
+      
+      'type': begin
+         Declaration_Type(Func, Source);
+         Func.Declaration := '\fB' + Visibility + '\fR'
+      end
+   end
+end;
+
 Procedure ParseDeclaration(Var Func:TFunctionDesc);
 Var
    Source, DeclType : AnsiString;
@@ -816,22 +841,27 @@ begin
       DeclType := LowerCase(Trim(DeclType));
       
       Case(DeclType) of
-         'strict':    Declaration_Method('strict'   , Func, Source); // strict private, yay
-         'private':   Declaration_Method('private'  , Func, Source); 
-         'protected': Declaration_Method('protected', Func, Source); 
-         'public':    Declaration_Method('public'   , Func, Source); 
-         'published': Declaration_Method('published', Func, Source); 
+         'private', 'strict private', 
+         'protected', 'strict protected',
+         'public', 'published', 'strict':
+            Declaration_Member(DeclType, Func, Source); 
          
-         'virtual': Func.Declaration += ' \fBvirtual\fR;';
-         'abstract': Func.Declaration += ' \fBabstract\fR;';
+         'procedure', 'function':
+            Declaration_Routine(DeclType, Func, Source);
+            
+         'const', 'var':
+            Declaration_Var(DeclType, Func, Source);
          
-         'procedure': Declaration_Routine('procedure', Func, Source);
-         'function': Declaration_Routine('function', Func, Source);
+         'type':
+            Declaration_Type(Func, Source);
          
-         'const': Declaration_Var('const', Func, Source);
-         'var': Declaration_Var('var', Func, Source);
+         'virtual', 'abstract', 'override':
+            Func.Declaration += ' \fB'+ DeclType +'\fR;';
          
-         'type': Declaration_Type(Func, Source);
+         // Calling conventions
+         'inline', 'cdecl', 'interrupt', 'safecall', 'stdcall',
+         'register', 'pascal', 'oldfpccall':
+            Func.Declaration += ' \fB'+ DeclType +'\fR;';
       end
    end
 end;
