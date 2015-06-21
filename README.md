@@ -43,32 +43,58 @@ seriously worried about the state of your system if that wasn't available.
 ----------
 ```
 Usage: fpman OPTION | PAGE
-  --help               Display this help list.
+ PAGE
+        When no option is specified, fpman requires a PAGE argument. It will
+        then search its sqlite database for a matching entry. For routines and
+        properties which are part of object / class / interface definition,
+        PAGE must be in TYPE.MEMBER format. To avoid ambiguity, PAGE can be
+        prefixed with unit name, and even package name, if required - as in
+        package.unit.page. The wildcards ? * can be used in PAGE. If the page
+        is found, fpman will execute man to display it. If multiple matching
+        pages are found, fpman will print a list of matching pages and ask
+        which page to display.
 
-  --import=PATH        Imports .html or .man documentation files from PATH
-                       to fpman library. PATH can specify either a single file
-                       to import, or a directory to scan for files. 
-                       Subdirectories will be scanned recursively.
+ --list PAGE
+        Like the default mode of operation, except that instead of firing man,
+        prints a summary of each matching page.
 
-  --purge              Cleans fpman library directory and sqlite database.
- 
-  --rebuild            Rebuilds fpman sqlite database based on files found
-                       in the library directory.
+ --import PATH
+        Imports .html or .man documentation files from PATH to fpman library.
+        PATH can specify either a single file to import, or a directory to
+        scan for .html/.man files. Subdirectories will be scanned recursively.
 
-  --revalidate         Like --rebuild, but instead of recreating the database
-                       from scratch, takes all entries and checks if their
-                       manpages are still in library, removing dead entries.
+ --purge[=SECTION]
+        Cleans fpman library directory and sqlite database. If SECTION is
+        specified, instead of the whole library, only the selected part will
+        be purged. SECTION must be in "type:name" format, where type must be
+        either "package" or "unit". Unit names can be prefixed with the
+        package name, followed by a dot, to avoid ambiguity.
 
-  --version            Displays version information and exists.
+ --rebuild[=SECTION]
+        Purges fpman sqlite database, and then rebuilds its contents based on
+        files found in the library directory. SECTION can be used in the same
+        manner as in the --purge option.
+
+ --revalidate[=SECTION]
+        Looks through all the entries present in sqlite database and checks if
+        their manpages are still in library. Any dead entries are removed from
+        the database. SECTION can be used in the same manner as in --purge or
+        --rebuild options.
+
+ --help
+        Displays this help list and exits.
+
+ --version
+        Displays version information and exits.
+
 ```
 To get started with *fpman*, you can either download FPC documentation in 
-HTML format from ** [here](http://freepascal.org/down/docs/docs.var) ** and 
+HTML format from **[here](http://freepascal.org/down/docs/docs.var)** and 
 run `fpman --import`, or clone this repo and either run `fpman --import` on
 the pre-converted pages, or copy the whole `pages/` directory to
 `~/.suve/fpman/` and then run `fpman --rebuild`. 
 
-**Note:** Import / rebuild will probably take a couple of minutes due to
-database code being quite unoptimised. This will be improved in the future.
+**Note:** Import / rebuild can take a couple of minutes.
 
 Once you've got some manpages imported, just run `fpman PAGE` and the 
 program will search its library for your desired topic. The search is 
@@ -93,7 +119,7 @@ apt-get install fpc libsqlite3-dev
 ```
 
 No additional steps are needed before compiling, so you can just tap in
-`fpc fpman.pas`. Or, of you insist on using make:
+`fpc fpman.pas`. Or, if you insist on using make:
 ```
 cd src/
 make release

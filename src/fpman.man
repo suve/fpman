@@ -1,7 +1,6 @@
 ." manpage for fpman
 ." contact suve [at] svgames.pl to correct typos and errors
-
-.TH fpman 1 "2015-04-21" "1.1.0" "manpages for free pascal"
+.TH fpman 1 "2015-06-21" "1.2.0" "manpages for free pascal"
 
 .SH NAME
 \fBfpman\fR - manpages for Free Pascal
@@ -19,29 +18,50 @@ storing them in a database in the user's home directory for quick access.
 \fI--help\fR
 Display a summary of available options and exit.
 .TP
+\fI--list\fR PAGE
+Like the default mode of operation, except that instead of firing man, 
+prints a summary of each matching page.
+.TP
 \fI--import\fR=PATH
 Import .html or .man files into database. PATH can specify either a file, 
 or a directory, in which case it will be scanned recursively for files.
 .TP
-\fI--purge\fR
-Clean fpman sqlite database and manpage library directory.
+\fI--purge\fR[=SECTION]
+Clean fpman sqlite database and manpage library directory. If SECTION is 
+specified, instead of the whole library, only the selected part will 
+be purged. SECTION must be in "type:name" format, where type must be 
+either "package" or "unit". Unit names can be prefixed with the 
+package name, followed by a dot, to avoid ambiguity.
 .TP
-\fI--rebuild\fR
+\fI--rebuild\fR[=SECTION]
 Rebuild fpman sqlite database based on files found in the library directory.
+SECTION can be used in the same manner as in --purge.
 .TP
-\fI--revalidate\fR
+\fI--revalidate\fR[=SECTION]
 For every page listed in the sqlite database, check if its manpage
 is present in the library directory. Remove dead entries.
+SECTION can be used in the same manner as in --purge.
 .TP
 \fI--version\fR
 Display version information and exit.
 
 .SH USAGE
 If no option was specified, the default mode of operation is to take the 
-first argument provided to the program and search for a mathing manpage.
-For object/class methods, PAGE must be in TYPE.IDENTIFIER format.
+first argument provided to the program and search for a matching manpage.
+The ? and * wilcards can be used in the name.
+
+If multiple matching pages are found, the program lists them and asks
+which page the user wants to see. If no matches are found, the program
+searches for any manpages containing PAGE in their title and prints a
+list of similarly named pages.
+
+For object/class/interface methods and properties, 
+PAGE must be in TYPE.IDENTIFIER format. 
+
 To avoid ambiguity, PAGE can be prefixed with the unit name, and even
 package name, if needed (as in, PACKAGE.UNIT.PAGE).
+
+
 
 .SH FILES
 .TP
