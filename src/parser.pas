@@ -752,8 +752,7 @@ begin
    end;
    
    // Check if type definition (varname :typename is present)
-   DeclType := LeftStr(Source, 3);
-   If((DeclType = ':</') or (DeclType = ' : ')) then begin
+   If(FirstNonWhitespaceChar(Source) = ':') then begin
       DeleteUntil(Source, '</span>');
       DeleteUntil(Source, '<span class="sym">', @DeclType);
       DeclType := HTML_to_troff(DeclType);
@@ -846,7 +845,8 @@ begin
          'public', 'published', 'strict':
             Declaration_Member(DeclType, Func, Source); 
          
-         'procedure', 'function':
+         'procedure', 'function',
+         'constructor', 'destructor':
             Declaration_Routine(DeclType, Func, Source);
             
          'const', 'var':

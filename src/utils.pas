@@ -18,6 +18,8 @@ Const
 Function DeleteUntil(Var Target:AnsiString; Const Limiter:AnsiString; Const StoreInto:PAnsiString = NIL):Boolean;
 Function RightDeleteUntil(Var Target:AnsiString; Const Limiter:AnsiString; Const StoreInto:PAnsiString = NIL):Boolean;
 
+Function FirstNonWhitespaceChar(Const Source:AnsiString):Char;
+
 Function TimeDiff(Const StartTime, EndTime:Comp):AnsiString;
 
 Function GetFileContents(Const FilePath:AnsiString; Out Content:AnsiString):Boolean;
@@ -95,6 +97,20 @@ begin
    Delete(Target, P, L);
    
    Exit(True)
+end;
+
+Function FirstNonWhitespaceChar(Const Source:AnsiString):Char;
+Var
+   P, L: sInt;
+begin
+   L := Length(Source);
+   If(L = 0) then Exit(#32);
+   
+   For P:=1 to L do 
+      If(Not (Source[P] in [#8, #10, #13, #32]))
+         then Exit(Source[P]);
+   
+   Exit(#32)
 end;
 
 Function GetFileContents(Const FilePath:AnsiString; Out Content:AnsiString):Boolean;
