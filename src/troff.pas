@@ -9,6 +9,7 @@ interface
 Procedure OutputTroff(Var F:System.Text; Const Desc:TFunctionDesc; Const FileName:AnsiString);
 
 Function ParseTroff(Troff:AnsiString; Out Desc:TFunctionDesc):sInt;
+Function StripTroff(Const Source:AnsiString):AnsiString;
 
 
 implementation
@@ -127,5 +128,11 @@ begin
    Exit(+1)
 end;
 
+Function StripTroff(Const Source:AnsiString):AnsiString;
+begin
+   Result := StringReplace(Source, '\fR', '', [rfReplaceAll]);
+   Result := StringReplace(Result, '\fB', '', [rfReplaceAll]);
+   Result := StringReplace(Result, '\fI', '', [rfReplaceAll])
+end;
 
 end.

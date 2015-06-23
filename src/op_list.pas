@@ -68,7 +68,7 @@ begin
       Case(ParseTroff(Content, Desc)) of
          -1: Writeln(stderr, 'fpman: failed to parse manpage');
           0: Writeln(stderr, 'fpman: file ~/.suve/fpman/', TmpName, ' does not seem to be an fpman page');
-         +1: Writeln(stdout, '  ', Desc.Summary);
+         +1: Writeln(stdout, '  ', StripTroff(Desc.Summary));
       end
    end;
    
