@@ -23,6 +23,8 @@ Function Init(Const WasCreated:PBoolean = NIL):Boolean;
 Function Quit():Boolean;
 
 Function CreateTables():Boolean;
+Function EnsureUniquePageIndex():Boolean;
+
 Function AddPage(Const Desc:TFunctionDesc):Boolean;
 
 Function FindPage(PageName:AnsiString; Var rset:TResultSet):Boolean;
@@ -88,6 +90,28 @@ begin
    Exit(True)
 end;
 
+Function ExecuteRawQuery(Const StatementName, StatementSQL:AnsiString):Boolean;
+Var
+   Stat : Psqlite3_stmt;
+begin
+   If(sqlite3_prepare_v2(Datab, PChar(StatementSQL), -1, @Stat, NIL) <> SQLITE_OK) then begin
+      Writeln(stderr, 'fpman: failed to prepare ',StatementName,' statement: ',sqlite3_errmsg(Datab));
+      Exit(False)
+   end;
+   
+   If(sqlite3_step(Stat) <> SQLITE_DONE) then begin
+      Writeln(stderr, 'fpman: failed to execute ',StatementName,' statement: ',sqlite3_errmsg(Datab));
+      Exit(False)
+   end;
+   
+   If(sqlite3_finalize(Stat) <> SQLITE_OK) then begin
+      Writeln(stderr, 'fpman: failed to finalize ',StatementName,' statement: ',sqlite3_errmsg(Datab));
+      Exit(False)
+   end;
+   
+   Exit(True)
+end;
+
 Function CreateTables():Boolean;
 Const
    STATEMENT_NUM = 6;
@@ -145,29 +169,23 @@ Const
    
 Var
    Idx : sInt;
-   Stat : Psqlite3_stmt;
 begin
-   For Idx := 1 to STATEMENT_NUM do begin
-      If(sqlite3_prepare_v2(Datab, PChar(SQL[Idx]), -1, @Stat, NIL) <> SQLITE_OK) then begin
-         Writeln(stderr, 'fpman: failed to prepare ',StmtName[Idx],' statement: ',sqlite3_errmsg(Datab));
-         Exit(False)
-      end;
-      
-      If(sqlite3_step(Stat) <> SQLITE_DONE) then begin
-         Writeln(stderr, 'fpman: failed to execute ',StmtName[Idx],' statement: ',sqlite3_errmsg(Datab));
-         Exit(False)
-      end;
-      
-      If(sqlite3_finalize(Stat) <> SQLITE_OK) then begin
-         Writeln(stderr, 'fpman: failed to finalize ',StmtName[Idx],' statement: ',sqlite3_errmsg(Datab));
-         Exit(False)
-      end;
-   end;
+   For Idx := 1 to STATEMENT_NUM do
+      If(Not ExecuteRawQuery(StmtName[Idx], SQL[Idx]))
+         then Exit(False);
    
    Exit(True)
 end;
 
-Function InsertID(Const TableName, NameCol, InsertValue:AnsiString; Const fkID:sInt; Const fkCol:AnsiString):Boolean;
+Function EnsureUniquePageIndex():Boolean;
+begin
+   Exit(ExecuteRawQuery('CREATE INDEX',
+      'CREATE UNIQUE INDEX IF NOT EXISTS `page_uniq_idx` '+
+      'ON `pages` (`page_UnitId` ASC, `page_Name` ASC)'
+   ))
+end;
+
+Function __Insert(Const InsertType, TableName, NameCol, InsertValue:AnsiString; Const fkID:sInt; Const fkCol:AnsiString):Boolean;
 Var
    NameIdx : sInt;
    Stat : Psqlite3_stmt;
@@ -175,7 +193,7 @@ Var
 begin
    If(fkId > -1) then NameIdx := 2 else NameIdx := 1;
 
-   SQL := 'INSERT INTO `' + TableName + '` (';
+   SQL := InsertType + ' INTO `' + TableName + '` (';
    If(fkID > -1) then SQL += '`' + fkCol + '`, ';
    SQL += '`' + NameCol + '`) VALUES (';
    If(fkID > -1) then SQL += '?, ';
@@ -209,6 +227,16 @@ begin
    end;
    
    Exit(True)
+end;
+
+Function InsertID(Const TableName, NameCol, InsertValue:AnsiString; Const fkID:sInt; Const fkCol:AnsiString):Boolean;
+begin
+   Exit(__Insert('INSERT', TableName, NameCol, InsertValue, fkID, fkCol))
+end;
+
+Function InsertOrIgnoreID(Const TableName, NameCol, InsertValue:AnsiString; Const fkID:sInt; Const fkCol:AnsiString):Boolean;
+begin
+   Exit(__Insert('INSERT OR IGNORE', TableName, NameCol, InsertValue, fkID, fkCol))
 end;
 
 Function SelectID(Out ID:sInt; Const TableName, NameCol, SearchFor:AnsiString; Const fkID:sInt; Const fkCol:AnsiString):Boolean;
@@ -268,13 +296,13 @@ begin
    
    If(Not (InsertID(TableName, NameCol, SearchFor, fkID, fkCol))) then Exit(False);
    
-   If(Not (SelectID(ID, TableName, NameCol, SearchFor, fkId, fkCol))) then Exit(False);
-   Exit(ID <> -1)
+   ID := sqlite3_last_insert_rowid(Datab);
+   Exit(True)
 end;
 
 Function AddPage(Const Desc:TFunctionDesc):Boolean;
 Var
-   PackageId, UnitId, PageId : sInt;
+   PackageId, UnitId : sInt;
 begin
    UnitId := UnitDict[Desc.Package_ + '.' + Desc.Unit_];
    If(UnitId < 0) then begin
@@ -297,8 +325,8 @@ begin
       UnitDict[Desc.Package_ + '.' + Desc.Unit_] := UnitId
    end;
    
-   If(Not GetID(PageId, 'pages', 'page_Name', Desc.Name, UnitId, 'page_unitId')) then begin
-      Writeln(stderr, 'fpman: failed to SELECT / INSERT page from database');
+   If(Not InsertOrIgnoreID('pages', 'page_Name', Desc.Name, UnitId, 'page_unitId')) then begin
+      Writeln(stderr, 'fpman: failed to INSERT page into database');
       Exit(False)
    end;
    

@@ -182,6 +182,7 @@ Var
    PackName, UnitName: AnsiString;
 begin
    StartTime := TimeStampToMSecs(DateTimeToTimeStamp(Now()));
+   SuccPages := 0; SkipPages := 0; FailPages := 0;
    
    If(ModeArg = '') then
       RebuildAll_Purge()
@@ -194,9 +195,13 @@ begin
       RebuildSection_Purge(PackName, UnitName)
    end;
    
-   SuccPages := 0;
-   SkipPages := 0;
-   FailPages := 0;
+   If(Not EnsureUniquePageIndex()) then begin
+      Writeln(stderr, 'fpman: failed to create unique page index');
+      Writeln(stderr, 'fpman: aborting rebuild');
+      
+      db.Quit();
+      Halt(1)
+   end;
    
    If(ModeArg = '')
       then RebuildAll_Import(SuccPages, SkipPages, FailPages)

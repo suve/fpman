@@ -222,10 +222,15 @@ Var
    StartTime, EndTime : Comp;
 begin
    StartTime := TimeStampToMSecs(DateTimeToTimeStamp(Now()));
+   SuccPages := 0; SkipPages := 0; FailPages := 0;
    
-   SuccPages := 0;
-   SkipPages := 0;
-   FailPages := 0;
+   If(Not EnsureUniquePageIndex()) then begin
+      Writeln(stderr, 'fpman: failed to create unique page index');
+      Writeln(stderr, 'fpman: aborting import');
+      
+      db.Quit();
+      Halt(1)
+   end;
    
    If(DirectoryExists(ModeArg)) then begin
       If(RightStr(ModeArg, 1) <> '/') then ModeArg += '/';

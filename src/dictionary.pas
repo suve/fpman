@@ -54,7 +54,7 @@ Var
    Min, Max, Mid : sInt;
 begin
    Min := 0; Max := (_Num - 1);
-   While(Min < Max) do begin
+   While(Min <= Max) do begin
       Mid := (Min + Max) div 2;
       
       Case Sign(CompareStr(Name, _Arr[Mid].Name)) of
