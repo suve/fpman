@@ -148,7 +148,7 @@ Var
    Stat : Psqlite3_stmt;
 begin
    For Idx := 1 to STATEMENT_NUM do begin
-      If(sqlite3_prepare(Datab, PChar(SQL[Idx]), -1, @Stat, NIL) <> SQLITE_OK) then begin
+      If(sqlite3_prepare_v2(Datab, PChar(SQL[Idx]), -1, @Stat, NIL) <> SQLITE_OK) then begin
          Writeln(stderr, 'fpman: failed to prepare ',StmtName[Idx],' statement: ',sqlite3_errmsg(Datab));
          Exit(False)
       end;
@@ -181,7 +181,7 @@ begin
    If(fkID > -1) then SQL += '?, ';
    SQL += '?)';
    
-   If(sqlite3_prepare(Datab, PChar(SQL), -1, @Stat, NIL) <> SQLITE_OK) then begin
+   If(sqlite3_prepare_v2(Datab, PChar(SQL), -1, @Stat, NIL) <> SQLITE_OK) then begin
       Writeln(stderr, 'fpman: failed to prepare INSERT INTO `',TableName,'` statement: ',sqlite3_errmsg(Datab));
       Exit(False)
    end;
@@ -221,7 +221,7 @@ begin
    SQL := 'SELECT * FROM `' + TableName + '` WHERE (`' + NameCol + '` = ?)';
    If(fkCol <> '') then SQL += ' AND (`' + fkCol + '` = ?)';
    
-   If(sqlite3_prepare(Datab, PChar(SQL), -1, @Stat, NIL) <> SQLITE_OK) then begin
+   If(sqlite3_prepare_v2(Datab, PChar(SQL), -1, @Stat, NIL) <> SQLITE_OK) then begin
       Writeln(stderr, 'fpman: failed to prepare SELECT FROM `',TableName,'` statement: ',sqlite3_errmsg(Datab));
       Exit(False)
    end;
@@ -318,7 +318,7 @@ begin
       If(Unit_ <> '') then SQL += '`unit_Name` LIKE ? ESCAPE ''\'') AND (';
    SQL += '`page_Name` LIKE ? ESCAPE ''\'')';
    
-   If(sqlite3_prepare(Datab, PChar(SQL), -1, @Stat, NIL) <> SQLITE_OK) then begin
+   If(sqlite3_prepare_v2(Datab, PChar(SQL), -1, @Stat, NIL) <> SQLITE_OK) then begin
       Writeln(stderr, 'fpman: failed to prepare SELECT FROM `view_pages` statement: ',sqlite3_errmsg(Datab));
       Exit(False)
    end;
@@ -439,7 +439,7 @@ begin
    
    SQL := 'SELECT `page_Id`, `pkg_Name`, `unit_Name`, `page_Name` FROM `view_pages` WHERE (`fullName` LIKE ? ESCAPE ''\'')';
    
-   If(sqlite3_prepare(Datab, PChar(SQL), -1, @Stat, NIL) <> SQLITE_OK) then begin
+   If(sqlite3_prepare_v2(Datab, PChar(SQL), -1, @Stat, NIL) <> SQLITE_OK) then begin
       Writeln(stderr, 'fpman: failed to prepare SELECT FROM `view_pages` statement: ',sqlite3_errmsg(Datab));
       Exit(False)
    end;
@@ -507,7 +507,7 @@ begin
       end;
    end;
    
-   If(sqlite3_prepare(Datab, PChar(SQL), -1, @Stat, NIL) <> SQLITE_OK) then begin
+   If(sqlite3_prepare_v2(Datab, PChar(SQL), -1, @Stat, NIL) <> SQLITE_OK) then begin
       Writeln(stderr, 'fpman: failed to prepare SELECT FROM `view_pages` statement: ',sqlite3_errmsg(Datab));
       Exit(False)
    end;
@@ -588,7 +588,7 @@ begin
    end;
    SQL += ');';
    
-   If(sqlite3_prepare(Datab, PChar(SQL), -1, @Stat, NIL) <> SQLITE_OK) then begin
+   If(sqlite3_prepare_v2(Datab, PChar(SQL), -1, @Stat, NIL) <> SQLITE_OK) then begin
       Writeln(stderr, 'fpman: failed to prepare DELETE FROM `pages` statement: ',sqlite3_errmsg(Datab));
       Exit(False)
    end;
@@ -644,7 +644,7 @@ begin
    
    SQL := 'SELECT `pkg_Id`, `pkg_Name` FROM `packages` WHERE (`pkg_Name` LIKE ? ESCAPE ''\'')';
    
-   If(sqlite3_prepare(Datab, PChar(SQL), -1, @Stat, NIL) <> SQLITE_OK) then begin
+   If(sqlite3_prepare_v2(Datab, PChar(SQL), -1, @Stat, NIL) <> SQLITE_OK) then begin
       Writeln(stderr, 'fpman: failed to prepare SELECT FROM `packages` statement: ',sqlite3_errmsg(Datab));
       Exit(False)
    end;
@@ -696,7 +696,7 @@ begin
    If(PackId >= 0) then SQL += '(`unit_pkgId` = '+IntToStr(PackId)+') AND ';
    SQL += '(`unit_Name` LIKE ? ESCAPE ''\'')';
    
-   If(sqlite3_prepare(Datab, PChar(SQL), -1, @Stat, NIL) <> SQLITE_OK) then begin
+   If(sqlite3_prepare_v2(Datab, PChar(SQL), -1, @Stat, NIL) <> SQLITE_OK) then begin
       Writeln(stderr, 'fpman: failed to prepare SELECT FROM `units` statement: ',sqlite3_errmsg(Datab));
       Exit(False)
    end;
@@ -737,7 +737,7 @@ Var
    Code : sInt;
    Stat : Psqlite3_stmt;
 begin
-   If(sqlite3_prepare(Datab, PChar(SQL), -1, @Stat, NIL) <> SQLITE_OK) then begin
+   If(sqlite3_prepare_v2(Datab, PChar(SQL), -1, @Stat, NIL) <> SQLITE_OK) then begin
       Writeln(stderr, 'fpman: failed to prepare SELECT COUNT(*) statement: ',sqlite3_errmsg(Datab));
       Exit(False)
    end;
@@ -775,7 +775,7 @@ begin
    For Idx := 1 to TABLE_NUM do begin
       SQL := 'DELETE FROM `' + TABLES[Idx] + '`';
       
-      If(sqlite3_prepare(Datab, PChar(SQL), -1, @Stat, NIL) <> SQLITE_OK) then begin
+      If(sqlite3_prepare_v2(Datab, PChar(SQL), -1, @Stat, NIL) <> SQLITE_OK) then begin
          Writeln(stderr, 'fpman: failed to prepare ',SQL,' statement: ',sqlite3_errmsg(Datab));
          Exit(False)
       end;
@@ -792,7 +792,7 @@ begin
       
       SQL := 'UPDATE `sqlite_sequence` SET `seq` = 0 WHERE `name` = '''+TABLES[Idx]+'''';
       
-      If(sqlite3_prepare(Datab, PChar(SQL), -1, @Stat, NIL) <> SQLITE_OK) then begin
+      If(sqlite3_prepare_v2(Datab, PChar(SQL), -1, @Stat, NIL) <> SQLITE_OK) then begin
          Writeln(stderr, 'fpman: failed to prepare UPDATE `sqlite_sequence` statement: ',sqlite3_errmsg(Datab));
          Exit(False)
       end;
@@ -825,7 +825,7 @@ begin
    For Idx := Low(ID) to High(ID) do SQL += IntToStr(ID[Idx]) + ',';
    SQL[Length(SQL)] := ')';
    
-   If(sqlite3_prepare(Datab, PChar(SQL), -1, @Stat, NIL) <> SQLITE_OK) then begin
+   If(sqlite3_prepare_v2(Datab, PChar(SQL), -1, @Stat, NIL) <> SQLITE_OK) then begin
       Writeln(stderr, 'fpman: failed to prepare DELETE FROM `pages` statement: ',sqlite3_errmsg(Datab));
       Exit(False)
    end;
