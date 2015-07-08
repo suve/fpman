@@ -11,16 +11,26 @@ implementation
 
 uses
    SysUtils, Unix,
+   dynarray,
    conf, options, descriptions, parser, db, troff, utils;
+
+Type
+   TDescArray = specialize GenericDynArray<TFunctionDesc>;
 
 Var
    InputStr : AnsiString;
-   Desc : TFunctionDesc;
+   
+   Desc: TFunctionDesc;
+   DescList: TDescArray;
    
    CacheDir : AnsiString;
+   SuccPages, halfPages, SkipPages, FailPages : sInt;
    
    TmpName : AnsiString;
    TmpFile : Text;
+
+Const
+   IMPORT_STEP = 100;
 
 Function CreateCacheDir():Boolean;
 begin
@@ -106,11 +116,6 @@ begin
       then Desc.Unit_ := LowerCase(Desc.Unit_)
       else Desc.Unit_ := 'unknown';
    
-   If(Not db.AddPage(Desc)) then begin
-      Writeln(stderr, 'fpman: failed to add page for ',Desc.Package_,'.',Desc.Unit_,'.',Desc.Name,' to sqlite database');
-      Exit(-1)
-   end;
-   
    Exit(+1)
 end;
 
@@ -152,20 +157,16 @@ begin
       then Desc.Unit_ := LowerCase(Desc.Unit_)
       else Desc.Unit_ := 'unknown';
    
-   If(Not db.AddPage(Desc)) then begin
-      Writeln(stderr, 'fpman: failed to add page for ',Desc.Package_,'.',Desc.Unit_,'.',Desc.Name,' to sqlite database');
-      Exit(-1)
-   end;
-   
    Exit(+1)
 end;
 
-Procedure ImportDirectory(Const Directory:AnsiString; Var SuccPages, SkipPages, FailPages : sInt);
+Procedure ImportDirectory(Const Directory:AnsiString);
 Type
    TParseFunc = Function(Const FilePath:AnsiString):sInt;
 Var
    Search: TSearchRec;
    Ext, Temp, PathOnly: AnsiString;
+   
    ParseFunc: TParseFunc;
 begin
    PathOnly := ExtractFilePath(Directory);
@@ -175,7 +176,7 @@ begin
       If((Search.Name = '.') or (Search.Name = '..')) then Continue;
       
       If((Search.Attr and faDirectory) = faDirectory) then begin
-         ImportDirectory(PathOnly + Search.Name + '/*', SuccPages, SkipPages, FailPages);
+         ImportDirectory(PathOnly + Search.Name + '/*');
          Continue
       end;
       
@@ -202,8 +203,20 @@ begin
       
       Case(ParseFunc(PathOnly + Search.Name)) of
          +1: begin
-            Writeln(stderr, 'fpman: successfully imported manpage for ',Desc.Package_,'.',Desc.Unit_,'.',Desc.Name);
-            SuccPages += 1
+            Writeln(stderr, 'fpman: parsed manpage for ',Desc.Package_,'.',Desc.Unit_,'.',Desc.Name);
+            DescList.Push(Desc);
+            
+            If(DescList.Count >= IMPORT_STEP) then begin
+               If(db.AddMultiplePages(DescList.Ptr, DescList.Count)) then begin
+                  Writeln(stderr, 'fpman: successfully added ',DescList.Count,' pages to database');
+                  SuccPages += DescList.Count
+               end else begin
+                  Writeln(stderr, 'fpman: failed to add ',DescList.Count,' pages to database');
+                  HalfPages += DescList.Count
+               end;
+               
+               DescList.Purge()
+            end
          end;
          
          0:
@@ -218,11 +231,12 @@ end;
 
 Procedure Operation_Import();
 Var
-   SuccPages, SkipPages, FailPages : sInt;
    StartTime, EndTime : Comp;
 begin
    StartTime := TimeStampToMSecs(DateTimeToTimeStamp(Now()));
-   SuccPages := 0; SkipPages := 0; FailPages := 0;
+   SuccPages := 0; HalfPages := 0; SkipPages := 0; FailPages := 0;
+   
+   DescList.Create(IMPORT_STEP);
    
    If(Not EnsureUniquePageIndex()) then begin
       Writeln(stderr, 'fpman: failed to create unique page index');
@@ -236,12 +250,24 @@ begin
       If(RightStr(ModeArg, 1) <> '/') then ModeArg += '/';
       ModeArg += '*'
    end;
-   ImportDirectory(ModeArg, SuccPages, SkipPages, FailPages);
+   ImportDirectory(ModeArg);
+   
+   If(DescList.Count > 0) then begin
+      If(db.AddMultiplePages(DescList.Ptr, DescList.Count)) then begin
+         Writeln(stderr, 'fpman: successfully added ',DescList.Count,' pages to database');
+         SuccPages += DescList.Count
+      end else begin
+         Writeln(stderr, 'fpman: failed to add ',DescList.Count,' pages to database');
+         halfPages += DescList.Count
+      end
+   end;
+   DescList.Destroy();
    
    EndTime := TimeStampToMSecs(DateTimeToTimeStamp(Now()));
    
-   If(SuccPages > 0) then begin
+   If(SuccPages > 0) or (halfPages > 0) then begin
       Write(stderr, 'fpman: import finished in ',TimeDiff(StartTime,EndTime),', ',SuccPages,' pages imported');
+      If(halfPages > 0) then Write(stderr, ', ',halfPages,' pages outside database');
       If(FailPages > 0) then Write(stderr, ', ',FailPages,' pages failed');
       If(SkipPages > 0) then Write(stderr, ', ',SkipPages,' pages skipped');
       Writeln(stderr);
@@ -251,8 +277,8 @@ begin
    
    If(FailPages = 0) then begin
       If(SkipPages > 0)
-         then Writeln(stderr, 'fpman: import finished in ',TimeDiff(StartTime,EndTime),', ',SkipPages,' pages skipped')
-         else Writeln(stderr, 'fpman: import finished in ',TimeDiff(StartTime,EndTime),', no pages found');
+         then Write(stderr, 'fpman: import finished in ',TimeDiff(StartTime,EndTime),', ',SkipPages,' pages skipped')
+         else Write(stderr, 'fpman: import finished in ',TimeDiff(StartTime,EndTime),', no pages found');
       
       Halt(0)
    end;

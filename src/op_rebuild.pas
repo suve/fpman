@@ -11,10 +11,20 @@ implementation
 
 uses
    SysUtils, Unix,
+   dynarray,
    conf, options, descriptions, db, troff, utils;
 
+Type
+   TDescArray = specialize GenericDynArray<TFunctionDesc>;
+
 Var
-   Desc:TFunctionDesc;
+   Desc: TFunctionDesc;
+   DescList: TDescArray;
+   
+   SuccPages, halfPages, SkipPages, FailPages: sInt;
+
+Const
+   REBUILD_STEP = 100;
 
 Function ImportMan(Const FilePath:AnsiString):sInt;
 Var
@@ -56,11 +66,6 @@ begin
       then Desc.Unit_ := LowerCase(Desc.Unit_)
       else Desc.Unit_ := 'unknown';
    
-   If(Not db.AddPage(Desc)) then begin
-      Writeln(stderr, 'fpman: failed to add page for ',Desc.Package_,'.',Desc.Unit_,'.',Desc.Name,' to sqlite database');
-      Exit(-1)
-   end;
-   
    Exit(+1)
 end;
 
@@ -87,7 +92,19 @@ begin
       Case(ImportMan(PathOnly + Search.Name)) of
          +1: begin
             Writeln(stderr, 'fpman: found manpage for ',Desc.Package_,'.',Desc.Unit_,'.',Desc.Name);
-            SuccPages += 1
+            DescList.Push(Desc);
+            
+            If(DescList.Count >= REBUILD_STEP) then begin
+               If(db.AddMultiplePages(DescList.Ptr, DescList.Count)) then begin
+                  Writeln(stderr, 'fpman: successfully added ',DescList.Count,' pages to database');
+                  SuccPages += DescList.Count
+               end else begin
+                  Writeln(stderr, 'fpman: failed to add ',DescList.Count,' pages to database');
+                  HalfPages += DescList.Count
+               end;
+               
+               DescList.Purge()
+            end
          end;
          
          0:
@@ -177,12 +194,13 @@ end;
 
 Procedure Operation_Rebuild();
 Var
-   SuccPages, SkipPages, FailPages: sInt;
    StartTime, EndTime: Comp;
    PackName, UnitName: AnsiString;
 begin
    StartTime := TimeStampToMSecs(DateTimeToTimeStamp(Now()));
-   SuccPages := 0; SkipPages := 0; FailPages := 0;
+   SuccPages := 0; halfPages := 0; SkipPages := 0; FailPages := 0;
+   
+   DescList.Create(REBUILD_STEP);
    
    If(ModeArg = '') then
       RebuildAll_Purge()
@@ -207,10 +225,22 @@ begin
       then RebuildAll_Import(SuccPages, SkipPages, FailPages)
       else RebuildSection_Import(PackName, UnitName, SuccPages, SkipPages, FailPages);
    
+   If(DescList.Count > 0) then begin
+      If(db.AddMultiplePages(DescList.Ptr, DescList.Count)) then begin
+         Writeln(stderr, 'fpman: successfully added ',DescList.Count,' pages to database');
+         SuccPages += DescList.Count
+      end else begin
+         Writeln(stderr, 'fpman: failed to add ',DescList.Count,' pages to database');
+         HalfPages += DescList.Count
+      end
+   end;
+   DescList.Destroy();
+   
    EndTime := TimeStampToMSecs(DateTimeToTimeStamp(Now()));
    
    If(SuccPages > 0) then begin
       Write(stderr, 'fpman: rebuild finished in ',TimeDiff(StartTime,EndTime),', ',SuccPages,' pages rebuilt');
+      If(HalfPages > 0) then Write(stderr, ', ',halfPages,' pages outside database');
       If(FailPages > 0) then Write(stderr, ', ',FailPages,' pages failed');
       If(SkipPages > 0) then Write(stderr, ', ',SkipPages,' pages skipped');
       Writeln(stderr);
