@@ -26,6 +26,7 @@ Function CreateTables():Boolean;
 Function EnsureUniquePageIndex():Boolean;
 
 Function AddPage(Const Desc:TFunctionDesc):Boolean;
+Function AddMultiplePages(Const DescArr:PFunctionDesc; Const Count:sInt):Boolean;
 
 Function FindPage(PageName:AnsiString; Var rset:TResultSet):Boolean;
 Function FindSimilarPages(PageName:AnsiString; Var rset:TResultSet):Boolean;
@@ -42,14 +43,22 @@ Function DeletePages(Const ID : Array of sInt):Boolean;
 
 
 implementation
-   uses SysUtils, Conf, dictionary;
+   uses SysUtils, StrUtils, Conf, dictionary;
 
 Type
+   PInsertRow = ^TInsertRow;
+   TInsertRow = record
+      val: PChar;
+      fk: sInt
+   end;
+   
    TIDDict = specialize GenericDictionary<sInt>;
+   TInsertDict = specialize GenericDynArray<TInsertRow>;
 
 Var
    Datab : Psqlite3;
    PkgDict, UnitDict: TIDDict;
+   irows: TInsertDict;
 
 Function Init(Const WasCreated:PBoolean):Boolean;
 Var
@@ -72,6 +81,7 @@ begin
    
    PkgDict.Create(-1, 4);
    UnitDict.Create(-1, 16);
+   irows.Create(16);
    
    If(WasCreated <> NIL) then WasCreated^ := FiEx;
    Exit(True)
@@ -79,8 +89,9 @@ end;
 
 Function Quit():Boolean;
 begin
-   PkgDict.Purge();
-   UnitDict.Purge();
+   PkgDict.Destroy();
+   UnitDict.Destroy();
+   irows.Destroy();
    
    If(sqlite3_close(Datab) <> SQLITE_OK) then begin
       Writeln(stderr, 'fpman: failed to close fpman.sqlite: ',sqlite3_errmsg(Datab));
@@ -185,35 +196,42 @@ begin
    ))
 end;
 
-Function __Insert(Const InsertType, TableName, NameCol, InsertValue:AnsiString; Const fkID:sInt; Const fkCol:AnsiString):Boolean;
+Function __Insert(Const InsertType, TableName, ValueCol, fkCol:AnsiString; Const Rows: PInsertRow; Const Count:sInt):Boolean;
 Var
-   NameIdx : sInt;
+   Idx, ArgIdx : sInt;
+   
    Stat : Psqlite3_stmt;
    SQL : AnsiString;
 begin
-   If(fkId > -1) then NameIdx := 2 else NameIdx := 1;
-
    SQL := InsertType + ' INTO `' + TableName + '` (';
-   If(fkID > -1) then SQL += '`' + fkCol + '`, ';
-   SQL += '`' + NameCol + '`) VALUES (';
-   If(fkID > -1) then SQL += '?, ';
-   SQL += '?)';
+   If(fkCol <> '') then SQL += '`'+fkCol+'`, ';
+   SQL += '`' + ValueCol + '`) VALUES ';
+   
+   If(fkCol <> '')
+      then SQL += DupeString('(?, ?),', Count)
+      else SQL += DupeString('(?),', Count);
+   SQL[Length(SQL)] := ';';
    
    If(sqlite3_prepare_v2(Datab, PChar(SQL), -1, @Stat, NIL) <> SQLITE_OK) then begin
       Writeln(stderr, 'fpman: failed to prepare INSERT INTO `',TableName,'` statement: ',sqlite3_errmsg(Datab));
       Exit(False)
    end;
    
-   If(fkID > -1) then begin
-      If(sqlite3_bind_int(Stat, 1, fkId) <> SQLITE_OK) then begin
+   ArgIdx := 1;
+   For Idx := 0 to (Count - 1) do begin
+      If(fkCol <> '') then begin
+         If(sqlite3_bind_int(Stat, ArgIdx, Rows[Idx].fk) <> SQLITE_OK) then begin
+            Writeln(stderr, 'fpman: failed to bind argument for INSERT INTO `',TableName,'` statement: ',sqlite3_errmsg(Datab));
+            Exit(False)
+         end;
+         ArgIdx += 1
+      end;
+      
+      If(sqlite3_bind_text(Stat, ArgIdx, Rows[Idx].val, -1, NIL) <> SQLITE_OK) then begin
          Writeln(stderr, 'fpman: failed to bind argument for INSERT INTO `',TableName,'` statement: ',sqlite3_errmsg(Datab));
          Exit(False)
       end;
-   end;
-   
-   If(sqlite3_bind_text(Stat, NameIdx, PChar(InsertValue), -1, NIL) <> SQLITE_OK) then begin
-      Writeln(stderr, 'fpman: failed to bind argument for INSERT INTO `',TableName,'` statement: ',sqlite3_errmsg(Datab));
-      Exit(False)
+      ArgIdx += 1
    end;
    
    If(sqlite3_step(Stat) <> SQLITE_DONE) then begin
@@ -229,14 +247,14 @@ begin
    Exit(True)
 end;
 
-Function InsertID(Const TableName, NameCol, InsertValue:AnsiString; Const fkID:sInt; Const fkCol:AnsiString):Boolean;
+Function InsertID(Const TableName, ValueCol, fkCol:AnsiString; Const Rows: PInsertRow; Const Count:sInt):Boolean;
 begin
-   Exit(__Insert('INSERT', TableName, NameCol, InsertValue, fkID, fkCol))
+   Exit(__Insert('INSERT', TableName, ValueCol, fkCol, Rows, Count))
 end;
 
-Function InsertOrIgnoreID(Const TableName, NameCol, InsertValue:AnsiString; Const fkID:sInt; Const fkCol:AnsiString):Boolean;
+Function InsertOrIgnoreID(Const TableName, ValueCol, fkCol:AnsiString; Const Rows: PInsertRow; Const Count:sInt):Boolean;
 begin
-   Exit(__Insert('INSERT OR IGNORE', TableName, NameCol, InsertValue, fkID, fkCol))
+   Exit(__Insert('INSERT OR IGNORE', TableName, ValueCol, fkCol, Rows, Count))
 end;
 
 Function SelectID(Out ID:sInt; Const TableName, NameCol, SearchFor:AnsiString; Const fkID:sInt; Const fkCol:AnsiString):Boolean;
@@ -290,47 +308,76 @@ begin
 end;
 
 Function GetID(Out ID:sInt; Const TableName, NameCol, SearchFor:AnsiString; Const fkID:sInt = -1; Const fkCol:AnsiString = ''):Boolean;
+Var
+   ir: TInsertRow;
 begin
    If(Not (SelectID(ID, TableName, NameCol, SearchFor, fkId, fkCol))) then Exit(False);
    If(ID <> -1) then Exit(True);
    
-   If(Not (InsertID(TableName, NameCol, SearchFor, fkID, fkCol))) then Exit(False);
+   ir.val := PChar(SearchFor);
+   ir.fk := fkID;
+   If(Not (InsertID(TableName, NameCol, fkCol, @ir, 1))) then Exit(False);
    
    ID := sqlite3_last_insert_rowid(Datab);
    Exit(True)
 end;
 
-Function AddPage(Const Desc:TFunctionDesc):Boolean;
+Function GetUnitID(Const Desc:TFunctionDesc; Out UnitId: sInt):Boolean;
 Var
-   PackageId, UnitId : sInt;
+   PackageId: sInt;
 begin
    UnitId := UnitDict[Desc.Package_ + '.' + Desc.Unit_];
-   If(UnitId < 0) then begin
-      
-      PackageId := PkgDict[Desc.Package_];
-      If(PackageId < 0) then begin
-         If(Not GetID(PackageId, 'packages', 'pkg_Name', Desc.Package_)) then begin
-            Writeln(stderr, 'fpman: failed to SELECT / INSERT package from database');
-            Exit(False)
-         end;
-         
-         PkgDict[Desc.Package_] := PackageId
-      end;
-      
-      If(Not GetID(UnitId, 'units', 'unit_Name', Desc.Unit_, PackageId, 'unit_pkgId')) then begin
-         Writeln(stderr, 'fpman: failed to SELECT / INSERT unit from database');
+   If(UnitId >= 0) then Exit(True);
+   
+   PackageId := PkgDict[Desc.Package_];
+   If(PackageId < 0) then begin
+      If(Not GetID(PackageId, 'packages', 'pkg_Name', Desc.Package_)) then begin
+         Writeln(stderr, 'fpman: failed to SELECT / INSERT package from database');
          Exit(False)
       end;
       
-      UnitDict[Desc.Package_ + '.' + Desc.Unit_] := UnitId
+      PkgDict[Desc.Package_] := PackageId
    end;
    
-   If(Not InsertOrIgnoreID('pages', 'page_Name', Desc.Name, UnitId, 'page_unitId')) then begin
+   If(Not GetID(UnitId, 'units', 'unit_Name', Desc.Unit_, PackageId, 'unit_pkgId')) then begin
+      Writeln(stderr, 'fpman: failed to SELECT / INSERT unit from database');
+      Exit(False)
+   end;
+   
+   UnitDict[Desc.Package_ + '.' + Desc.Unit_] := UnitId;
+   Exit(True)
+end;
+
+Function AddPage(Const Desc:TFunctionDesc):Boolean;
+Var
+   InsRow: TInsertRow;
+begin
+   If(Not GetUnitID(Desc, InsRow.fk)) then Exit(False);
+   InsRow.val := PChar(Desc.Name);
+   
+   If(Not InsertOrIgnoreID('pages', 'page_Name', 'page_unitId', @InsRow, 1)) then begin
       Writeln(stderr, 'fpman: failed to INSERT page into database');
       Exit(False)
    end;
    
    Exit(True)
+end;
+
+Function AddMultiplePages(Const DescArr:PFunctionDesc; Const Count:sInt):Boolean;
+Var
+   Idx: sInt;
+   InsRow: TInsertRow;
+begin
+   irows.Purge();
+   
+   For Idx := 0 to (Count - 1) do begin
+      If(Not GetUnitID(DescArr[Idx], InsRow.fk)) then Continue;
+      InsRow.val := PChar(DescArr[Idx].Name);
+      
+      irows.Push(InsRow)
+   end;
+   
+   Exit(InsertOrIgnoreID('pages', 'page_Name', 'page_unitId', irows.Ptr, irows.Count))
 end;
 
 

@@ -9,6 +9,7 @@ Type
       Protected
          Type
          DisposeProc = Procedure(Item : Tp);
+         TypePointer = ^Tp;
          TypeArray = Array of Tp;
          
          Var
@@ -27,6 +28,8 @@ Type
          Function  Trim():sInt;
          Procedure Push(Const Value:Tp);
          
+         Function Ptr(): TypePointer;
+         
          Property Count: sInt read _Num;
          Property Size: sInt read _Len;
          
@@ -34,6 +37,7 @@ Type
          
          Property Item[Idx: sInt]: Tp read ReadItem write WriteItem; Default;
          Property Arr : TypeArray read _Arr;
+         
          
          {$DEFINE STEP_DEFAULT := 8}
          Constructor Create(Const ResizeStep : sInt = STEP_DEFAULT);
@@ -67,6 +71,11 @@ begin
 
    For Idx := 0 to (_Num - 1) do FreeItem(_Arr[Idx]);
    _Num := 0
+end;
+
+Function GenericDynArray.Ptr(): TypePointer;
+begin
+   Result := @(Self._Arr[0])
 end;
 
 Function GenericDynArray.Trim():sInt;
