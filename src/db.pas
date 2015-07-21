@@ -367,6 +367,7 @@ Function AddMultiplePages(Const DescArr:PFunctionDesc; Const Count:sInt):Boolean
 Var
    Idx: sInt;
    InsRow: TInsertRow;
+   Pointer: PInsertRow;
 begin
    irows.Purge();
    
@@ -377,7 +378,15 @@ begin
       irows.Push(InsRow)
    end;
    
-   Exit(InsertOrIgnoreID('pages', 'page_Name', 'page_unitId', irows.Ptr, irows.Count))
+   If(InsertOrIgnoreID('pages', 'page_Name', 'page_unitId', irows.Ptr, irows.Count)) then Exit(True);
+   
+   Pointer := irows.Ptr;
+   For Idx := 0 to (irows.Count - 1) do begin
+      If(Not InsertOrIgnoreID('pages', 'page_Name', 'page_UnitId', Pointer, 1)) then Exit(False);
+      Pointer := @(Pointer[1])
+   end;
+   
+   Exit(True)
 end;
 
 
