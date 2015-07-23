@@ -17,7 +17,7 @@ uses
 Procedure Operation_List();
 Var
    TmpName, Content : AnsiString;
-   Desc: TFunctionDesc;
+   Desc: TPageDescription;
    DoQuit : Boolean;
    rset : TResultSet;
    Idx : sInt;

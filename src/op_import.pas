@@ -15,12 +15,12 @@ uses
    conf, options, descriptions, parser, db, troff, utils;
 
 Type
-   TDescArray = specialize GenericDynArray<TFunctionDesc>;
+   TDescArray = specialize GenericDynArray<TPageSummary>;
 
 Var
    InputStr : AnsiString;
    
-   Desc: TFunctionDesc;
+   Desc: TPageDescription;
    DescList: TDescArray;
    
    CacheDir : AnsiString;
@@ -204,7 +204,7 @@ begin
       Case(ParseFunc(PathOnly + Search.Name)) of
          +1: begin
             Writeln(stderr, 'fpman: parsed manpage for ',Desc.Package_,'.',Desc.Unit_,'.',Desc.Name);
-            DescList.Push(Desc);
+            DescList.Push(Summarize(Desc));
             
             If(DescList.Count >= IMPORT_STEP) then begin
                If(db.AddMultiplePages(DescList.Ptr, DescList.Count)) then begin

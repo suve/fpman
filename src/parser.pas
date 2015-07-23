@@ -6,7 +6,7 @@ unit parser;
 interface
    uses descriptions;
 
-Procedure ParseFunctionHTML(HTML:AnsiString;Out Func:TFunctionDesc;Const FileName:AnsiString);
+Procedure ParseFunctionHTML(HTML:AnsiString;Out Func:TPageDescription;Const FileName:AnsiString);
 
 
 implementation
@@ -100,7 +100,7 @@ begin
    Result := StringReplace(Result, '"', '\(dq', [rfReplaceAll]);
 end;
 
-Procedure ParseLocation(Var Func:TFunctionDesc);
+Procedure ParseLocation(Var Func:TPageDescription);
 Var
    P : sInt;
 begin
@@ -237,7 +237,7 @@ begin
       Delete(Text, Length(Text) - Length('.TP 0' + #10), Length('.TP 0' + #10))
 end;
 
-Procedure Declaration_Params(Const DeclPfx:AnsiString; Var Func:TFunctionDesc; Var Source:AnsiString);
+Procedure Declaration_Params(Const DeclPfx:AnsiString; Var Func:TPageDescription; Var Source:AnsiString);
 Var
    Symb, ReturnType: AnsiString;
    
@@ -318,7 +318,7 @@ begin
 end;
 
 
-Procedure Declaration_Routine(Const DeclType:AnsiString; Var Func:TFunctionDesc; Var Source:AnsiString);
+Procedure Declaration_Routine(Const DeclType:AnsiString; Var Func:TPageDescription; Var Source:AnsiString);
 Var
    DeclName, Fragment: AnsiString;
 begin
@@ -336,7 +336,7 @@ begin
    Declaration_Params(DeclName, Func, Source)
 end;
 
-Procedure Declaration_Property(Const Visibility:AnsiString; Var Func:TFunctionDesc; Var Source:AnsiString);
+Procedure Declaration_Property(Const Visibility:AnsiString; Var Func:TPageDescription; Var Source:AnsiString);
 Var
    ClassName, PropertyName, PropType, PropRead, PropWrite: AnsiString;
 begin
@@ -377,7 +377,7 @@ begin
    If(Pos(Source, '<span class="kw">default</span>') > 0) then Func.Declaration += #10#32#32 + '\fBdefault;\fR'
 end;
 
-Procedure Declaration_Enum(Const DeclName:AnsiString; Var Func:TFunctionDesc; Var Source:AnsiString);
+Procedure Declaration_Enum(Const DeclName:AnsiString; Var Func:TPageDescription; Var Source:AnsiString);
 Type
    TEnumMemberRow = record
       Name, Comment: AnsiString;
@@ -444,7 +444,7 @@ begin
    Func.Declaration += #10 + '.br' + #10 + '\fB);\fR'
 end;
 
-Procedure Declaration_Type(Var Func:TFunctionDesc; Var Source:AnsiString);
+Procedure Declaration_Type(Var Func:TPageDescription; Var Source:AnsiString);
 Type
    TTypeMemberRow = record
       Visibility, Prefix, Name, Type_, Suffix, RW, Comment : AnsiString;
@@ -737,7 +737,7 @@ begin
    Result := __declvar__Nesting(Source, 0)
 end;
 
-Procedure Declaration_Var(Const DeclPref:AnsiString; Var Func:TFunctionDesc; Var Source:AnsiString);
+Procedure Declaration_Var(Const DeclPref:AnsiString; Var Func:TPageDescription; Var Source:AnsiString);
 Var
    DeclName, DeclType, DeclVal: AnsiString;
 begin
@@ -785,7 +785,7 @@ begin
    Func.Declaration += ';'#10
 end;
 
-Procedure Declaration_Member(Const Visibility:AnsiString; Var Func:TFunctionDesc; Var Source:AnsiString);
+Procedure Declaration_Member(Const Visibility:AnsiString; Var Func:TPageDescription; Var Source:AnsiString);
 Var
    DeclKw : AnsiString;
 begin
@@ -816,7 +816,7 @@ begin
    end
 end;
 
-Procedure ParseDeclaration(Var Func:TFunctionDesc);
+Procedure ParseDeclaration(Var Func:TPageDescription);
 Var
    Source, DeclType : AnsiString;
 begin
@@ -866,7 +866,7 @@ begin
    end
 end;
 
-Procedure ParseInheritance(Var Func:TFunctionDesc);
+Procedure ParseInheritance(Var Func:TPageDescription);
 Type
    TInheritanceMember = record
       Class_, Comment : AnsiString
@@ -922,7 +922,7 @@ begin
    Func.Inheritance += '.TE'
 end;
 
-Procedure ParseSeeAlso(Var Func:TFunctionDesc);
+Procedure ParseSeeAlso(Var Func:TPageDescription);
 Var
    Source, Name, Desc : AnsiString;
 begin
@@ -940,7 +940,7 @@ begin
    end
 end;
 
-Procedure ParseGeneratedOn(Var Func:TFunctionDesc);
+Procedure ParseGeneratedOn(Var Func:TPageDescription);
 Const
    MonthNames : Array[1..12] of ShortString = (
       'jan', 'feb', 'mar', 'apr', 'may', 'jun',
@@ -970,7 +970,7 @@ begin
    Func.GeneratedOn := Year + '-' + Month + '-' + Day
 end;
 
-Procedure ParseName(Var Func:TFunctionDesc);
+Procedure ParseName(Var Func:TPageDescription);
 Var
    P : sInt;
 begin
@@ -985,7 +985,7 @@ begin
    Func.Name := HTML_to_troff(Func.Name)
 end;
 
-Procedure ParseFunctionHTML(HTML:AnsiString;Out Func:TFunctionDesc;Const FileName:AnsiString);
+Procedure ParseFunctionHTML(HTML:AnsiString;Out Func:TPageDescription;Const FileName:AnsiString);
 Var
    Section, Content : AnsiString;
    StillParsing : Boolean;

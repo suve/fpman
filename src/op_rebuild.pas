@@ -15,10 +15,10 @@ uses
    conf, options, descriptions, db, troff, utils;
 
 Type
-   TDescArray = specialize GenericDynArray<TFunctionDesc>;
+   TDescArray = specialize GenericDynArray<TPageSummary>;
 
 Var
-   Desc: TFunctionDesc;
+   Desc: TPageDescription;
    DescList: TDescArray;
    
    SuccPages, halfPages, SkipPages, FailPages: sInt;
@@ -92,7 +92,7 @@ begin
       Case(ImportMan(PathOnly + Search.Name)) of
          +1: begin
             Writeln(stderr, 'fpman: found manpage for ',Desc.Package_,'.',Desc.Unit_,'.',Desc.Name);
-            DescList.Push(Desc);
+            DescList.Push(Summarize(Desc));
             
             If(DescList.Count >= REBUILD_STEP) then begin
                If(db.AddMultiplePages(DescList.Ptr, DescList.Count)) then begin

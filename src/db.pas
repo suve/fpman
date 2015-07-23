@@ -25,8 +25,8 @@ Function Quit():Boolean;
 Function CreateTables():Boolean;
 Function EnsureUniquePageIndex():Boolean;
 
-Function AddPage(Const Desc:TFunctionDesc):Boolean;
-Function AddMultiplePages(Const DescArr:PFunctionDesc; Const Count:sInt):Boolean;
+Function AddPage(Const Desc:TPageSummary):Boolean;
+Function AddMultiplePages(Const DescArr:PPageSummary; Const Count:sInt):Boolean;
 
 Function FindPage(PageName:AnsiString; Var rset:TResultSet):Boolean;
 Function FindSimilarPages(PageName:AnsiString; Var rset:TResultSet):Boolean;
@@ -322,7 +322,7 @@ begin
    Exit(True)
 end;
 
-Function GetUnitID(Const Desc:TFunctionDesc; Out UnitId: sInt):Boolean;
+Function GetUnitID(Const Desc:TPageSummary; Out UnitId: sInt):Boolean;
 Var
    PackageId: sInt;
 begin
@@ -348,7 +348,7 @@ begin
    Exit(True)
 end;
 
-Function AddPage(Const Desc:TFunctionDesc):Boolean;
+Function AddPage(Const Desc:TPageSummary):Boolean;
 Var
    InsRow: TInsertRow;
 begin
@@ -363,7 +363,7 @@ begin
    Exit(True)
 end;
 
-Function AddMultiplePages(Const DescArr:PFunctionDesc; Const Count:sInt):Boolean;
+Function AddMultiplePages(Const DescArr:PPageSummary; Const Count:sInt):Boolean;
 Var
    Idx: sInt;
    InsRow: TInsertRow;
